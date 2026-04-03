@@ -1421,15 +1421,10 @@ function LiveGame() {
    ═══════════════════════════════════════════ */
 function LineupCard({ away, home, awayAbbr, homeAbbr, awayId, homeId, isLive, batterId, onDeckId, inHoleId, inningHalf }) {
   const t = useTheme()
-  const [activeTab, setActiveTab] = useState('away')
-  const lineup = activeTab === 'away' ? away : home
-
-  // Determine which team is currently batting
   const battingTeam = inningHalf === 'Top' ? 'away' : inningHalf === 'Bottom' ? 'home' : null
-  const isActiveLineup = isLive && battingTeam === activeTab
 
-  const getBadge = (playerId) => {
-    if (!isActiveLineup || !playerId) return null
+  const getBadge = (side, playerId) => {
+    if (!isLive || battingTeam !== side || !playerId) return null
     if (playerId === batterId) return 'AT BAT'
     if (playerId === onDeckId) return 'ON DECK'
     if (playerId === inHoleId) return 'IN HOLE'
@@ -1438,11 +1433,11 @@ function LineupCard({ away, home, awayAbbr, homeAbbr, awayId, homeId, isLive, ba
 
   const rowStyle = (i, badge) => ({
     display: 'grid',
-    gridTemplateColumns: '28px 40px 1fr 44px 60px',
+    gridTemplateColumns: '22px 30px 1fr 36px',
     alignItems: 'center',
-    gap: 10,
-    padding: '10px 12px',
-    borderRadius: 10,
+    gap: 6,
+    padding: '6px 8px',
+    borderRadius: 8,
     background: badge === 'AT BAT'
       ? `${t.accent}18`
       : badge === 'ON DECK'
@@ -1452,121 +1447,112 @@ function LineupCard({ away, home, awayAbbr, homeAbbr, awayId, homeId, isLive, ba
       : i % 2 === 0 ? `${t.accent}06` : 'transparent',
     border: badge === 'AT BAT' ? `1px solid ${t.accent}44` : '1px solid transparent',
     transition: 'all 0.4s ease',
-    position: 'relative',
   })
+
+  const renderTeamLineup = (lineup, abbr, teamId, side) => {
+    const isBatting = isLive && battingTeam === side
+    const totals = lineup.reduce((acc, p) => ({
+      ab: acc.ab + p.gameStats.ab, h: acc.h + p.gameStats.h,
+      r: acc.r + p.gameStats.r, rbi: acc.rbi + p.gameStats.rbi,
+    }), { ab: 0, h: 0, r: 0, rbi: 0 })
+
+    return (
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Team header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, paddingBottom: 8, borderBottom: `1px solid ${t.divider}` }}>
+          <TeamLogo abbr={abbr} teamId={teamId} size={28} highlight={isBatting} />
+          <span style={{ fontFamily: "'Oswald'", fontSize: '0.9rem', fontWeight: 700, color: t.textWhite, letterSpacing: '0.06em' }}>{abbr}</span>
+          {isLive && (
+            <span style={{
+              fontSize: '0.5rem', fontWeight: 700, letterSpacing: '0.08em',
+              padding: '3px 8px', borderRadius: 6, marginLeft: 'auto',
+              background: isBatting ? `${t.accent}18` : t.inputBg,
+              color: isBatting ? t.accent : t.textMuted,
+              border: `1px solid ${isBatting ? t.accent + '44' : t.cardBorder}`,
+            }}>
+              {isBatting ? '⚾ BAT' : '🛡️ FLD'}
+            </span>
+          )}
+        </div>
+
+        {lineup.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 20, color: t.textMuted2, fontSize: '0.75rem' }}>No lineup yet</div>
+        ) : (<>
+          {/* Column headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: '22px 30px 1fr 36px', gap: 6, padding: '0 8px 4px' }}>
+            <span style={{ fontSize: '0.5rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.08em' }}>#</span>
+            <span />
+            <span style={{ fontSize: '0.5rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.08em' }}>PLAYER</span>
+            <span style={{ fontSize: '0.5rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.08em', textAlign: 'center' }}>POS</span>
+          </div>
+
+          {/* Player rows */}
+          {lineup.map((p, i) => {
+            const badge = getBadge(side, p.id)
+            return (
+              <PlayerLink key={p.id} playerId={p.id} playerName={p.name} playerType={p.pos === 'P' ? 'pitcher' : 'batter'}>
+                <div style={rowStyle(i, badge)} className={badge === 'AT BAT' ? 'lineup-at-bat' : ''}>
+                  <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.65rem', fontWeight: 700, color: badge === 'AT BAT' ? t.accent : t.textMuted2 }}>{p.order}</span>
+                  <div style={{ position: 'relative' }}>
+                    <PlayerHeadshot playerId={p.id} name={p.name} size={26} />
+                    {badge === 'AT BAT' && (
+                      <div className="at-bat-ring" style={{
+                        position: 'absolute', top: -2, left: -2, right: -2, bottom: -2,
+                        borderRadius: '50%', border: `2px solid ${t.accent}`,
+                        boxShadow: `0 0 10px ${t.accentGlow}`,
+                      }} />
+                    )}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{
+                        fontSize: '0.72rem', fontWeight: badge ? 700 : 600,
+                        color: badge === 'AT BAT' ? t.accent : t.textStrong,
+                        lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>{p.name.split(' ').length > 1 ? `${p.name.split(' ')[0][0]}. ${p.name.split(' ').slice(1).join(' ')}` : p.name}</span>
+                      {badge && (
+                        <span className={badge === 'AT BAT' ? 'at-bat-badge' : ''} style={{
+                          fontSize: '0.42rem', fontWeight: 800, letterSpacing: '0.06em',
+                          padding: '1px 4px', borderRadius: 3, flexShrink: 0,
+                          background: badge === 'AT BAT' ? t.accent : badge === 'ON DECK' ? `${t.yellow}22` : `${t.textMuted}15`,
+                          color: badge === 'AT BAT' ? '#fff' : badge === 'ON DECK' ? t.yellow : t.textMuted,
+                          border: badge === 'ON DECK' ? `1px solid ${t.yellow}44` : 'none',
+                        }}>{badge}</span>
+                      )}
+                    </div>
+                    <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.55rem', color: badge === 'AT BAT' ? `${t.accent}cc` : t.textMuted2, marginTop: 1 }}>
+                      {p.gameStats.ab > 0 ? `${p.gameStats.h}-${p.gameStats.ab}` : '—'}
+                      {p.gameStats.rbi > 0 ? ` · ${p.gameStats.rbi} RBI` : ''}
+                      {p.gameStats.r > 0 ? ` · ${p.gameStats.r} R` : ''}
+                      {p.gameStats.so > 0 ? ` · ${p.gameStats.so} K` : ''}
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: "'DM Sans'", fontSize: '0.62rem', fontWeight: 700, color: t.accent, textAlign: 'center', background: `${t.accent}15`, borderRadius: 5, padding: '2px 0' }}>{p.pos}</div>
+                </div>
+              </PlayerLink>
+            )
+          })}
+
+          {/* Totals */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginTop: 10, paddingTop: 8, borderTop: `1px solid ${t.divider}` }}>
+            <StatMini label="AB" value={totals.ab} />
+            <StatMini label="H" value={totals.h} />
+            <StatMini label="R" value={totals.r} />
+            <StatMini label="RBI" value={totals.rbi} />
+          </div>
+        </>)}
+      </div>
+    )
+  }
 
   return (
     <Card style={{ marginTop: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <CardHeader>LINEUP</CardHeader>
-        {isLive && battingTeam && (
-          <span style={{
-            fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.1em',
-            padding: '4px 10px', borderRadius: 8,
-            background: battingTeam === activeTab ? `${t.accent}18` : t.inputBg,
-            color: battingTeam === activeTab ? t.accent : t.textMuted,
-            border: `1px solid ${battingTeam === activeTab ? t.accent + '44' : t.cardBorder}`,
-          }}>
-            {battingTeam === activeTab ? '⚾ BATTING' : '🛡️ FIELDING'}
-          </span>
-        )}
+      <CardHeader>LINEUPS</CardHeader>
+      <div className="lineup-horizontal" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 0 }}>
+        {renderTeamLineup(away, awayAbbr, awayId, 'away')}
+        <div style={{ width: 1, background: `linear-gradient(180deg, transparent, ${t.accent}33, transparent)`, margin: '0 12px' }} />
+        {renderTeamLineup(home, homeAbbr, homeId, 'home')}
       </div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <FilterBtn active={activeTab === 'away'} onClick={() => setActiveTab('away')}>
-          {awayAbbr} {isLive && battingTeam === 'away' && '⚾'}
-        </FilterBtn>
-        <FilterBtn active={activeTab === 'home'} onClick={() => setActiveTab('home')}>
-          {homeAbbr} {isLive && battingTeam === 'home' && '⚾'}
-        </FilterBtn>
-      </div>
-
-      {lineup.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 24, color: t.textMuted2, fontSize: '0.82rem' }}>
-          Lineup not yet available
-        </div>
-      ) : (<>
-        {/* Header row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '28px 40px 1fr 44px 60px', gap: 10, padding: '0 12px 8px', borderBottom: `1px solid ${t.divider}` }}>
-          <span style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em' }}>#</span>
-          <span />
-          <span style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em' }}>PLAYER</span>
-          <span style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', textAlign: 'center' }}>POS</span>
-          <span style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', textAlign: 'right' }}>AVG</span>
-        </div>
-
-        {/* Player rows */}
-        {lineup.map((p, i) => {
-          const badge = getBadge(p.id)
-          return (
-            <PlayerLink key={p.id} playerId={p.id} playerName={p.name} playerType={p.pos === 'P' ? 'pitcher' : 'batter'}>
-              <div style={rowStyle(i, badge)} className={badge === 'AT BAT' ? 'lineup-at-bat' : ''}>
-                {/* Order number */}
-                <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.72rem', fontWeight: 700, color: badge === 'AT BAT' ? t.accent : t.textMuted2 }}>{p.order}</span>
-
-                {/* Headshot with glow for at-bat */}
-                <div style={{ position: 'relative' }}>
-                  <PlayerHeadshot playerId={p.id} name={p.name} size={34} />
-                  {badge === 'AT BAT' && (
-                    <div className="at-bat-ring" style={{
-                      position: 'absolute', top: -3, left: -3, right: -3, bottom: -3,
-                      borderRadius: '50%', border: `2px solid ${t.accent}`,
-                      boxShadow: `0 0 12px ${t.accentGlow}`,
-                    }} />
-                  )}
-                </div>
-
-                {/* Name + game stats + badge */}
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: '0.82rem', fontWeight: badge ? 700 : 600, color: badge === 'AT BAT' ? t.accent : t.textStrong, lineHeight: 1.2 }}>{p.name}</span>
-                    {badge && (
-                      <span className={badge === 'AT BAT' ? 'at-bat-badge' : ''} style={{
-                        fontSize: '0.5rem', fontWeight: 800, letterSpacing: '0.08em',
-                        padding: '2px 6px', borderRadius: 4,
-                        background: badge === 'AT BAT' ? t.accent : badge === 'ON DECK' ? `${t.yellow}22` : `${t.textMuted}15`,
-                        color: badge === 'AT BAT' ? '#fff' : badge === 'ON DECK' ? t.yellow : t.textMuted,
-                        border: badge === 'ON DECK' ? `1px solid ${t.yellow}44` : 'none',
-                        whiteSpace: 'nowrap',
-                      }}>{badge}</span>
-                    )}
-                  </div>
-                  <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.62rem', color: badge === 'AT BAT' ? `${t.accent}cc` : t.textMuted2, marginTop: 2 }}>
-                    {p.gameStats.ab > 0 ? `${p.gameStats.h}-${p.gameStats.ab}` : '—'}
-                    {p.gameStats.rbi > 0 ? ` · ${p.gameStats.rbi} RBI` : ''}
-                    {p.gameStats.r > 0 ? ` · ${p.gameStats.r} R` : ''}
-                    {p.gameStats.bb > 0 ? ` · ${p.gameStats.bb} BB` : ''}
-                    {p.gameStats.so > 0 ? ` · ${p.gameStats.so} K` : ''}
-                  </div>
-                </div>
-
-                {/* Position */}
-                <div style={{ fontFamily: "'DM Sans'", fontSize: '0.72rem', fontWeight: 700, color: badge === 'AT BAT' ? t.accent : t.accent, textAlign: 'center', background: `${t.accent}15`, borderRadius: 6, padding: '3px 0' }}>{p.pos}</div>
-
-                {/* AVG */}
-                <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.75rem', fontWeight: 600, color: badge === 'AT BAT' ? t.accent : t.textStrong, textAlign: 'right' }}>{p.avg || '—'}</div>
-              </div>
-            </PlayerLink>
-          )
-        })}
-
-        {/* Game totals */}
-        {lineup.length > 0 && (() => {
-          const totals = lineup.reduce((acc, p) => ({
-            ab: acc.ab + p.gameStats.ab,
-            h: acc.h + p.gameStats.h,
-            r: acc.r + p.gameStats.r,
-            rbi: acc.rbi + p.gameStats.rbi,
-          }), { ab: 0, h: 0, r: 0, rbi: 0 })
-          return (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${t.divider}` }}>
-              <StatMini label="AB" value={totals.ab} />
-              <StatMini label="H" value={totals.h} />
-              <StatMini label="R" value={totals.r} />
-              <StatMini label="RBI" value={totals.rbi} />
-            </div>
-          )
-        })()}
-      </>)}
     </Card>
   )
 }

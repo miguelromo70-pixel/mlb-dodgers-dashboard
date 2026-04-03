@@ -1339,12 +1339,12 @@ function LiveGame() {
         const fieldingTeam = g.inningHalf === 'Top' ? lineups.home : lineups.away
         const defenders = fieldingTeam.filter(p => p.pos && p.pos !== 'DH').map(p => ({ name: p.name, pos: p.pos, id: p.id }))
         return (
-          <Card style={{ padding: 24, borderColor: `${t.accent}22`, background: `linear-gradient(135deg, ${t.cardBg}, ${t.accent}06)` }}>
+          <Card style={{ padding: 24, borderColor: `${t.accent}22`, background: `linear-gradient(135deg, ${t.cardBg}, ${t.accent}06)` }} className="field-card">
             {/* ── SCOREBOARD ── */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 36, marginBottom: 16 }}>
+            <div className="field-score" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 36, marginBottom: 16 }}>
               <div style={{ textAlign: 'center' }}><TeamLogo abbr={g.away.abbr} size={48} /><div style={{ fontFamily: "'DM Sans'", fontSize: '0.68rem', fontWeight: 600, color: t.textMuted2, letterSpacing: '0.08em', marginTop: 4 }}>{g.away.abbr}</div></div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontFamily: "'Bebas Neue'", fontSize: '3.8rem', color: t.textWhite, lineHeight: 1, textShadow: t.scoreShadow }}>{g.away.runs} <span style={{ color: t.textMuted3, margin: '0 8px', fontSize: '2.2rem' }}>—</span> {g.home.runs}</div>
+                <div className="field-score-num" style={{ fontFamily: "'Bebas Neue'", fontSize: '3.8rem', color: t.textWhite, lineHeight: 1, textShadow: t.scoreShadow }}>{g.away.runs} <span style={{ color: t.textMuted3, margin: '0 8px', fontSize: '2.2rem' }}>—</span> {g.home.runs}</div>
                 <div style={{ fontFamily: "'DM Sans'", fontSize: '0.72rem', fontWeight: 600, color: t.accent, letterSpacing: '0.08em', marginTop: 4 }}>{g.inning}</div>
               </div>
               <div style={{ textAlign: 'center' }}><TeamLogo abbr={g.home.abbr} size={48} highlight /><div style={{ fontFamily: "'DM Sans'", fontSize: '0.68rem', fontWeight: 600, color: t.textMuted2, letterSpacing: '0.08em', marginTop: 4 }}>{g.home.abbr}</div></div>
@@ -1353,7 +1353,7 @@ function LiveGame() {
             <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${t.accent}33, transparent)`, marginBottom: 16 }} />
 
             {/* ── FIELD + SIDEBAR ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: 20, alignItems: 'start' }}>
+            <div className="grid-field-card" style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: 20, alignItems: 'start' }}>
               {/* Left: Field SVG */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -4338,6 +4338,13 @@ body { font-family: 'DM Sans', sans-serif; background: ${t.bg}; color: ${t.text}
   .grid-bets { grid-template-columns: 1fr !important; }
   .grid-calendar { gap: 2px !important; }
   .grid-calendar > div { min-height: 62px !important; padding: 4px 2px !important; }
+  .grid-field-card { grid-template-columns: 1fr !important; gap: 16px !important; }
+  .field-card { padding: 16px !important; }
+  .field-score { gap: 20px !important; }
+  .field-score-num { font-size: 2.8rem !important; }
+  .field-score-num span { font-size: 1.6rem !important; }
+  .lineup-horizontal { grid-template-columns: 1fr !important; }
+  .lineup-horizontal > div:nth-child(2) { width: 100% !important; height: 1px !important; margin: 8px 0 !important; background: linear-gradient(90deg, transparent, ${t.accent}33, transparent) !important; }
   .score-big-resp { font-size: 3rem !important; }
   .score-dash-resp { font-size: 1.8rem !important; }
   .vs-screen-teams { gap: 16px !important; flex-direction: column !important; }

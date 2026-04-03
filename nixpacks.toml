@@ -1,10 +1,10 @@
 providers = ["node"]
 
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+nixPkgs = ["nodejs_22"]
 
 [phases.install]
-cmds = ["npm install", "cd frontend && npm install"]
+cmds = ["npm install", "cd frontend && rm -rf node_modules && npm install"]
 
 [phases.build]
 cmds = ["cd frontend && npm run build"]

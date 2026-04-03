@@ -155,6 +155,7 @@ export default function App() {
   const [activeSection, setActiveSection] = useState('home')
   const [playerFilter, setPlayerFilter] = useState('all')
   const [selectedPlayer, setSelectedPlayer] = useState(null)
+  const [profilePlayer, setProfilePlayer] = useState(null)
   const [chatMessages, setChatMessages] = useState(CHAT_MESSAGES)
   const [chatInput, setChatInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
@@ -166,6 +167,7 @@ export default function App() {
   // ── Live data state ──
   const [standings, setStandings] = useState(STANDINGS)
   const [liveGame, setLiveGame] = useState(null) // null = loading, false = no game
+  const [lineups, setLineups] = useState({ away: [], home: [] })
   const [todaysGames, setTodaysGames] = useState([])
   const [roster, setRoster] = useState(PLAYERS)
   const [schedule, setSchedule] = useState([])
@@ -255,7 +257,10 @@ export default function App() {
   const loadLiveGame = useCallback(async () => {
     if (!selectedGamePk) return
     try {
-      const data = await api.getLiveGameData(selectedGamePk)
+      const [data, lineupsData] = await Promise.all([
+        api.getLiveGameData(selectedGamePk),
+        api.getGameLineups(selectedGamePk),
+      ])
       // Enrich pitcher/batter stats
       if (data.pitcher?.id || data.batter?.id) {
         const box = await api.getBoxscoreStats(selectedGamePk, data.pitcher?.id, data.batter?.id)
@@ -264,6 +269,7 @@ export default function App() {
         if (box.batterAvg) data.batter.avg = box.batterAvg
       }
       setLiveGame(data)
+      setLineups(lineupsData)
     } catch {
       setLiveGame(false)
     }
@@ -294,8 +300,9 @@ export default function App() {
   }
 
   const dataValue = {
-    standings, liveGame, todaysGames, roster, schedule, socialFeed, news,
+    standings, liveGame, lineups, todaysGames, roster, schedule, socialFeed, news,
     recentGames, dodgersRecord, loading, selectedGamePk, setSelectedGamePk,
+    openPlayerProfile: (player) => setProfilePlayer(player),
   }
 
   const navItems = [
@@ -430,6 +437,7 @@ export default function App() {
             )}
           </div>
         </nav>
+      {profilePlayer && <PlayerProfile player={profilePlayer} onClose={() => setProfilePlayer(null)} />}
       </div>
     </ThemeCtx.Provider>
     </DataCtx.Provider>
@@ -755,14 +763,16 @@ function HomeNextGame({ onNav }) {
       {(ng.away.probablePitcher || ng.home.probablePitcher) && (
         <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${t.divider}` }}>
           {[ng.away, ng.home].map((team, i) => team.probablePitcher && (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <PlayerHeadshot playerId={team.probablePitcher.id} name={team.probablePitcher.name} size={32} />
-              <div>
-                <div style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.06em' }}>STARTER</div>
-                <div style={{ fontWeight: 700, color: t.textStrong, fontSize: '0.78rem' }}>{team.probablePitcher.name}</div>
-                <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.62rem', color: t.accent }}>{team.probablePitcher.record} · {team.probablePitcher.era} ERA</div>
+            <PlayerLink key={i} playerId={team.probablePitcher.id} playerName={team.probablePitcher.name} playerType="pitcher">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <PlayerHeadshot playerId={team.probablePitcher.id} name={team.probablePitcher.name} size={32} />
+                <div>
+                  <div style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.06em' }}>STARTER</div>
+                  <div style={{ fontWeight: 700, color: t.textStrong, fontSize: '0.78rem' }}>{team.probablePitcher.name}</div>
+                  <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.62rem', color: t.accent }}>{team.probablePitcher.record} · {team.probablePitcher.era} ERA</div>
+                </div>
               </div>
-            </div>
+            </PlayerLink>
           ))}
         </div>
       )}
@@ -771,15 +781,17 @@ function HomeNextGame({ onNav }) {
       {(stars.away.length > 0 || stars.home.length > 0) && (
         <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${t.divider}` }}>
           {[...stars.away, ...stars.home].slice(0, 4).map((p, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <PlayerHeadshot playerId={p.id} name={p.name} size={28} />
-              <div>
-                <div style={{ fontWeight: 600, color: t.textStrong, fontSize: '0.68rem' }}>{p.name.split(' ').pop()}</div>
-                <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.58rem', color: t.accent }}>
-                  {p.type === 'pitcher' ? `${p.stats.era} ERA` : `${p.stats.avg} AVG`}
+            <PlayerLink key={i} playerId={p.id} playerName={p.name} playerType={p.type}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <PlayerHeadshot playerId={p.id} name={p.name} size={28} />
+                <div>
+                  <div style={{ fontWeight: 600, color: t.textStrong, fontSize: '0.68rem' }}>{p.name.split(' ').pop()}</div>
+                  <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.58rem', color: t.accent }}>
+                    {p.type === 'pitcher' ? `${p.stats.era} ERA` : `${p.stats.avg} AVG`}
+                  </div>
                 </div>
               </div>
-            </div>
+            </PlayerLink>
           ))}
         </div>
       )}
@@ -995,23 +1007,27 @@ function HomeSection({ onNav }) {
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 32, marginTop: 16, alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <PlayerHeadshot playerId={g.pitcher?.id} name={g.pitcher?.name || 'P'} size={48} />
-                <div>
-                  <div style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.08em' }}>PITCHER</div>
-                  <div style={{ fontSize: '1rem', fontWeight: 700, color: t.textStrong }}>{g.pitcher?.name || 'TBD'}</div>
-                  <div style={{ fontSize: '0.72rem', fontFamily: "'JetBrains Mono'", color: t.accent }}>{g.pitcher?.era ? `ERA ${g.pitcher.era}` : ''}</div>
+              <PlayerLink playerId={g.pitcher?.id} playerName={g.pitcher?.name} playerType="pitcher">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <PlayerHeadshot playerId={g.pitcher?.id} name={g.pitcher?.name || 'P'} size={48} />
+                  <div>
+                    <div style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.08em' }}>PITCHER</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: t.textStrong }}>{g.pitcher?.name || 'TBD'}</div>
+                    <div style={{ fontSize: '0.72rem', fontFamily: "'JetBrains Mono'", color: t.accent }}>{g.pitcher?.era ? `ERA ${g.pitcher.era}` : ''}</div>
+                  </div>
                 </div>
-              </div>
+              </PlayerLink>
               <div style={{ width: 1, height: 36, background: t.divider }} />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <PlayerHeadshot playerId={g.batter?.id} name={g.batter?.name || 'B'} size={48} />
-                <div>
-                  <div style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.08em' }}>BATTER</div>
-                  <div style={{ fontSize: '1rem', fontWeight: 700, color: t.textStrong }}>{g.batter?.name || 'TBD'}</div>
-                  <div style={{ fontSize: '0.72rem', fontFamily: "'JetBrains Mono'", color: t.accent }}>{g.batter?.avg ? `AVG ${g.batter.avg}` : ''}</div>
+              <PlayerLink playerId={g.batter?.id} playerName={g.batter?.name} playerType="batter">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <PlayerHeadshot playerId={g.batter?.id} name={g.batter?.name || 'B'} size={48} />
+                  <div>
+                    <div style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.08em' }}>BATTER</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: t.textStrong }}>{g.batter?.name || 'TBD'}</div>
+                    <div style={{ fontSize: '0.72rem', fontFamily: "'JetBrains Mono'", color: t.accent }}>{g.batter?.avg ? `AVG ${g.batter.avg}` : ''}</div>
+                  </div>
                 </div>
-              </div>
+              </PlayerLink>
             </div>
           </Card>
         ) : (
@@ -1276,7 +1292,7 @@ function SocialMedia() {
    ═══════════════════════════════════════════ */
 function LiveGame() {
   const t = useTheme()
-  const { liveGame, todaysGames, selectedGamePk, setSelectedGamePk, roster } = useData()
+  const { liveGame, lineups, todaysGames, selectedGamePk, setSelectedGamePk, roster } = useData()
   const g = liveGame || null
   const hasActiveGame = g && (g.isLive || g.isFinal || g.innings?.length > 0)
 
@@ -1328,22 +1344,26 @@ function LiveGame() {
         <Card>
           <CardHeader>AT BAT</CardHeader>
           <div style={{ display: 'flex', justifyContent: 'space-around', padding: '16px 0', alignItems: 'center' }}>
-            <div style={{ textAlign: 'center' }}>
-              <PlayerHeadshot playerId={g.pitcher?.id} name={g.pitcher?.name || ''} size={72} />
-              <div style={{ fontSize: '0.65rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', marginTop: 10 }}>PITCHER</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: t.textStrong, margin: '4px 0' }}>{g.pitcher?.name}</div>
-              <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.75rem', color: t.accent }}>ERA {g.pitcher?.era} · {g.pitcher?.pitches}P</div>
-            </div>
+            <PlayerLink playerId={g.pitcher?.id} playerName={g.pitcher?.name} playerType="pitcher">
+              <div style={{ textAlign: 'center' }}>
+                <PlayerHeadshot playerId={g.pitcher?.id} name={g.pitcher?.name || ''} size={72} />
+                <div style={{ fontSize: '0.65rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', marginTop: 10 }}>PITCHER</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: t.textStrong, margin: '4px 0' }}>{g.pitcher?.name}</div>
+                <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.75rem', color: t.accent }}>ERA {g.pitcher?.era} · {g.pitcher?.pitches}P</div>
+              </div>
+            </PlayerLink>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
               <div style={{ fontFamily: "'Bebas Neue'", fontSize: '1.8rem', color: t.textMuted3 }}>VS</div>
               <div style={{ width: 40, height: 2, background: `linear-gradient(90deg, transparent, ${t.accent}44, transparent)`, borderRadius: 1 }} />
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <PlayerHeadshot playerId={g.batter?.id} name={g.batter?.name || ''} size={72} />
-              <div style={{ fontSize: '0.65rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', marginTop: 10 }}>BATTER</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: t.textStrong, margin: '4px 0' }}>{g.batter?.name}</div>
-              <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.75rem', color: t.accent }}>AVG {g.batter?.avg}</div>
-            </div>
+            <PlayerLink playerId={g.batter?.id} playerName={g.batter?.name} playerType="batter">
+              <div style={{ textAlign: 'center' }}>
+                <PlayerHeadshot playerId={g.batter?.id} name={g.batter?.name || ''} size={72} />
+                <div style={{ fontSize: '0.65rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', marginTop: 10 }}>BATTER</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: t.textStrong, margin: '4px 0' }}>{g.batter?.name}</div>
+                <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.75rem', color: t.accent }}>AVG {g.batter?.avg}</div>
+              </div>
+            </PlayerLink>
           </div>
         </Card>
       </div>
@@ -1368,6 +1388,19 @@ function LiveGame() {
           </tbody>
         </table>
       </Card>
+      {/* LINEUPS */}
+      {(lineups.away.length > 0 || lineups.home.length > 0) && (
+        <LineupCard
+          away={lineups.away} home={lineups.home}
+          awayAbbr={g.away.abbr} homeAbbr={g.home.abbr}
+          awayId={g.away.id} homeId={g.home.id}
+          isLive={g.isLive}
+          batterId={g.batter?.id}
+          onDeckId={g.onDeck?.id}
+          inHoleId={g.inHole?.id}
+          inningHalf={g.inningHalf}
+        />
+      )}
       <HighlightsSection gamePk={selectedGamePk} />
       <Card style={{ marginTop: 16 }}>
         <CardHeader>RECENT PLAYS</CardHeader>
@@ -1380,6 +1413,161 @@ function LiveGame() {
       </Card>
       </>)}
     </div>
+  )
+}
+
+/* ═══════════════════════════════════════════
+   LINEUP CARD — SIDE-BY-SIDE BATTING ORDERS
+   ═══════════════════════════════════════════ */
+function LineupCard({ away, home, awayAbbr, homeAbbr, awayId, homeId, isLive, batterId, onDeckId, inHoleId, inningHalf }) {
+  const t = useTheme()
+  const [activeTab, setActiveTab] = useState('away')
+  const lineup = activeTab === 'away' ? away : home
+
+  // Determine which team is currently batting
+  const battingTeam = inningHalf === 'Top' ? 'away' : inningHalf === 'Bottom' ? 'home' : null
+  const isActiveLineup = isLive && battingTeam === activeTab
+
+  const getBadge = (playerId) => {
+    if (!isActiveLineup || !playerId) return null
+    if (playerId === batterId) return 'AT BAT'
+    if (playerId === onDeckId) return 'ON DECK'
+    if (playerId === inHoleId) return 'IN HOLE'
+    return null
+  }
+
+  const rowStyle = (i, badge) => ({
+    display: 'grid',
+    gridTemplateColumns: '28px 40px 1fr 44px 60px',
+    alignItems: 'center',
+    gap: 10,
+    padding: '10px 12px',
+    borderRadius: 10,
+    background: badge === 'AT BAT'
+      ? `${t.accent}18`
+      : badge === 'ON DECK'
+      ? `${t.yellow}10`
+      : badge === 'IN HOLE'
+      ? `${t.textMuted}08`
+      : i % 2 === 0 ? `${t.accent}06` : 'transparent',
+    border: badge === 'AT BAT' ? `1px solid ${t.accent}44` : '1px solid transparent',
+    transition: 'all 0.4s ease',
+    position: 'relative',
+  })
+
+  return (
+    <Card style={{ marginTop: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <CardHeader>LINEUP</CardHeader>
+        {isLive && battingTeam && (
+          <span style={{
+            fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.1em',
+            padding: '4px 10px', borderRadius: 8,
+            background: battingTeam === activeTab ? `${t.accent}18` : t.inputBg,
+            color: battingTeam === activeTab ? t.accent : t.textMuted,
+            border: `1px solid ${battingTeam === activeTab ? t.accent + '44' : t.cardBorder}`,
+          }}>
+            {battingTeam === activeTab ? '⚾ BATTING' : '🛡️ FIELDING'}
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <FilterBtn active={activeTab === 'away'} onClick={() => setActiveTab('away')}>
+          {awayAbbr} {isLive && battingTeam === 'away' && '⚾'}
+        </FilterBtn>
+        <FilterBtn active={activeTab === 'home'} onClick={() => setActiveTab('home')}>
+          {homeAbbr} {isLive && battingTeam === 'home' && '⚾'}
+        </FilterBtn>
+      </div>
+
+      {lineup.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 24, color: t.textMuted2, fontSize: '0.82rem' }}>
+          Lineup not yet available
+        </div>
+      ) : (<>
+        {/* Header row */}
+        <div style={{ display: 'grid', gridTemplateColumns: '28px 40px 1fr 44px 60px', gap: 10, padding: '0 12px 8px', borderBottom: `1px solid ${t.divider}` }}>
+          <span style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em' }}>#</span>
+          <span />
+          <span style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em' }}>PLAYER</span>
+          <span style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', textAlign: 'center' }}>POS</span>
+          <span style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', textAlign: 'right' }}>AVG</span>
+        </div>
+
+        {/* Player rows */}
+        {lineup.map((p, i) => {
+          const badge = getBadge(p.id)
+          return (
+            <PlayerLink key={p.id} playerId={p.id} playerName={p.name} playerType={p.pos === 'P' ? 'pitcher' : 'batter'}>
+              <div style={rowStyle(i, badge)} className={badge === 'AT BAT' ? 'lineup-at-bat' : ''}>
+                {/* Order number */}
+                <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.72rem', fontWeight: 700, color: badge === 'AT BAT' ? t.accent : t.textMuted2 }}>{p.order}</span>
+
+                {/* Headshot with glow for at-bat */}
+                <div style={{ position: 'relative' }}>
+                  <PlayerHeadshot playerId={p.id} name={p.name} size={34} />
+                  {badge === 'AT BAT' && (
+                    <div className="at-bat-ring" style={{
+                      position: 'absolute', top: -3, left: -3, right: -3, bottom: -3,
+                      borderRadius: '50%', border: `2px solid ${t.accent}`,
+                      boxShadow: `0 0 12px ${t.accentGlow}`,
+                    }} />
+                  )}
+                </div>
+
+                {/* Name + game stats + badge */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: badge ? 700 : 600, color: badge === 'AT BAT' ? t.accent : t.textStrong, lineHeight: 1.2 }}>{p.name}</span>
+                    {badge && (
+                      <span className={badge === 'AT BAT' ? 'at-bat-badge' : ''} style={{
+                        fontSize: '0.5rem', fontWeight: 800, letterSpacing: '0.08em',
+                        padding: '2px 6px', borderRadius: 4,
+                        background: badge === 'AT BAT' ? t.accent : badge === 'ON DECK' ? `${t.yellow}22` : `${t.textMuted}15`,
+                        color: badge === 'AT BAT' ? '#fff' : badge === 'ON DECK' ? t.yellow : t.textMuted,
+                        border: badge === 'ON DECK' ? `1px solid ${t.yellow}44` : 'none',
+                        whiteSpace: 'nowrap',
+                      }}>{badge}</span>
+                    )}
+                  </div>
+                  <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.62rem', color: badge === 'AT BAT' ? `${t.accent}cc` : t.textMuted2, marginTop: 2 }}>
+                    {p.gameStats.ab > 0 ? `${p.gameStats.h}-${p.gameStats.ab}` : '—'}
+                    {p.gameStats.rbi > 0 ? ` · ${p.gameStats.rbi} RBI` : ''}
+                    {p.gameStats.r > 0 ? ` · ${p.gameStats.r} R` : ''}
+                    {p.gameStats.bb > 0 ? ` · ${p.gameStats.bb} BB` : ''}
+                    {p.gameStats.so > 0 ? ` · ${p.gameStats.so} K` : ''}
+                  </div>
+                </div>
+
+                {/* Position */}
+                <div style={{ fontFamily: "'DM Sans'", fontSize: '0.72rem', fontWeight: 700, color: badge === 'AT BAT' ? t.accent : t.accent, textAlign: 'center', background: `${t.accent}15`, borderRadius: 6, padding: '3px 0' }}>{p.pos}</div>
+
+                {/* AVG */}
+                <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.75rem', fontWeight: 600, color: badge === 'AT BAT' ? t.accent : t.textStrong, textAlign: 'right' }}>{p.avg || '—'}</div>
+              </div>
+            </PlayerLink>
+          )
+        })}
+
+        {/* Game totals */}
+        {lineup.length > 0 && (() => {
+          const totals = lineup.reduce((acc, p) => ({
+            ab: acc.ab + p.gameStats.ab,
+            h: acc.h + p.gameStats.h,
+            r: acc.r + p.gameStats.r,
+            rbi: acc.rbi + p.gameStats.rbi,
+          }), { ab: 0, h: 0, r: 0, rbi: 0 })
+          return (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 14, paddingTop: 12, borderTop: `1px solid ${t.divider}` }}>
+              <StatMini label="AB" value={totals.ab} />
+              <StatMini label="H" value={totals.h} />
+              <StatMini label="R" value={totals.r} />
+              <StatMini label="RBI" value={totals.rbi} />
+            </div>
+          )
+        })()}
+      </>)}
+    </Card>
   )
 }
 
@@ -1427,20 +1615,22 @@ function NextGameScreen() {
   const homeStars = getStars(homeRoster)
 
   const starCard = (player, align) => (
-    <div style={{ display: 'flex', alignItems: align === 'right' ? 'flex-end' : 'flex-start', flexDirection: 'column', gap: 4 }}>
-      <PlayerHeadshot playerId={player.id} name={player.name} size={56} />
-      <div style={{ fontWeight: 700, color: t.textStrong, fontSize: '0.85rem', textAlign: align }}>{player.name}</div>
-      <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.68rem', color: t.accent }}>
-        {player.type === 'pitcher'
-          ? `${player.stats.era} ERA · ${player.stats.so} SO`
-          : `${player.stats.avg} AVG · ${player.stats.hr} HR`
-        }
+    <PlayerLink playerId={player.id} playerName={player.name} playerType={player.type}>
+      <div style={{ display: 'flex', alignItems: align === 'right' ? 'flex-end' : 'flex-start', flexDirection: 'column', gap: 4 }}>
+        <PlayerHeadshot playerId={player.id} name={player.name} size={56} />
+        <div style={{ fontWeight: 700, color: t.textStrong, fontSize: '0.85rem', textAlign: align }}>{player.name}</div>
+        <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.68rem', color: t.accent }}>
+          {player.type === 'pitcher'
+            ? `${player.stats.era} ERA · ${player.stats.so} SO`
+            : `${player.stats.avg} AVG · ${player.stats.hr} HR`
+          }
+        </div>
+        <span style={{
+          fontSize: '0.55rem', fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+          background: `${t.accent}18`, color: t.accent, border: `1px solid ${t.accent}33`,
+        }}>{player.pos}</span>
       </div>
-      <span style={{
-        fontSize: '0.55rem', fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-        background: `${t.accent}18`, color: t.accent, border: `1px solid ${t.accent}33`,
-      }}>{player.pos}</span>
-    </div>
+    </PlayerLink>
   )
 
   return (
@@ -1477,18 +1667,20 @@ function NextGameScreen() {
             </div>
             <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.85rem', color: t.text, marginTop: 4 }}>{ng.away.record}</div>
             {ng.away.probablePitcher && (
-              <div style={{ marginTop: 12, padding: '10px 16px', background: t.inputBg, borderRadius: 12, border: `1px solid ${t.cardBorder}`, display: 'inline-block' }}>
-                <div style={{ fontSize: '0.58rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', marginBottom: 4 }}>PROBABLE STARTER</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <PlayerHeadshot playerId={ng.away.probablePitcher.id} name={ng.away.probablePitcher.name} size={36} />
-                  <div>
-                    <div style={{ fontWeight: 700, color: t.textStrong, fontSize: '0.85rem' }}>{ng.away.probablePitcher.name}</div>
-                    <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.68rem', color: t.accent }}>
-                      {ng.away.probablePitcher.record} · {ng.away.probablePitcher.era} ERA
+              <PlayerLink playerId={ng.away.probablePitcher.id} playerName={ng.away.probablePitcher.name} playerType="pitcher">
+                <div style={{ marginTop: 12, padding: '10px 16px', background: t.inputBg, borderRadius: 12, border: `1px solid ${t.cardBorder}`, display: 'inline-block' }}>
+                  <div style={{ fontSize: '0.58rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', marginBottom: 4 }}>PROBABLE STARTER</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <PlayerHeadshot playerId={ng.away.probablePitcher.id} name={ng.away.probablePitcher.name} size={36} />
+                    <div>
+                      <div style={{ fontWeight: 700, color: t.textStrong, fontSize: '0.85rem' }}>{ng.away.probablePitcher.name}</div>
+                      <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.68rem', color: t.accent }}>
+                        {ng.away.probablePitcher.record} · {ng.away.probablePitcher.era} ERA
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              </PlayerLink>
             )}
           </div>
 
@@ -1513,18 +1705,20 @@ function NextGameScreen() {
             </div>
             <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.85rem', color: t.text, marginTop: 4 }}>{ng.home.record}</div>
             {ng.home.probablePitcher && (
-              <div style={{ marginTop: 12, padding: '10px 16px', background: t.inputBg, borderRadius: 12, border: `1px solid ${t.cardBorder}`, display: 'inline-block' }}>
-                <div style={{ fontSize: '0.58rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', marginBottom: 4 }}>PROBABLE STARTER</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <PlayerHeadshot playerId={ng.home.probablePitcher.id} name={ng.home.probablePitcher.name} size={36} />
-                  <div>
-                    <div style={{ fontWeight: 700, color: t.textStrong, fontSize: '0.85rem' }}>{ng.home.probablePitcher.name}</div>
-                    <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.68rem', color: t.accent }}>
-                      {ng.home.probablePitcher.record} · {ng.home.probablePitcher.era} ERA
+              <PlayerLink playerId={ng.home.probablePitcher.id} playerName={ng.home.probablePitcher.name} playerType="pitcher">
+                <div style={{ marginTop: 12, padding: '10px 16px', background: t.inputBg, borderRadius: 12, border: `1px solid ${t.cardBorder}`, display: 'inline-block' }}>
+                  <div style={{ fontSize: '0.58rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', marginBottom: 4 }}>PROBABLE STARTER</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <PlayerHeadshot playerId={ng.home.probablePitcher.id} name={ng.home.probablePitcher.name} size={36} />
+                    <div>
+                      <div style={{ fontWeight: 700, color: t.textStrong, fontSize: '0.85rem' }}>{ng.home.probablePitcher.name}</div>
+                      <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.68rem', color: t.accent }}>
+                        {ng.home.probablePitcher.record} · {ng.home.probablePitcher.era} ERA
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              </PlayerLink>
             )}
           </div>
         </div>
@@ -2137,6 +2331,7 @@ function LeaderCard({ player: p, type }) {
     ? [['HR', p.stats.hr], ['RBI', p.stats.rbi], ['OPS', p.stats.ops]]
     : [['SO', p.stats.so], ['WHIP', p.stats.whip], ['W', p.stats.w]]
   return (
+    <PlayerLink playerId={p.id} playerName={p.name} playerType={type}>
     <Card style={{ textAlign: 'center', padding: 20 }}>
       <div style={{ margin: '0 auto 10px', display: 'flex', justifyContent: 'center' }}>
         <PlayerHeadshot playerId={p.id} name={p.name} size={56} />
@@ -2154,6 +2349,7 @@ function LeaderCard({ player: p, type }) {
         ))}
       </div>
     </Card>
+    </PlayerLink>
   )
 }
 
@@ -2162,9 +2358,8 @@ function LeaderCard({ player: p, type }) {
    ═══════════════════════════════════════════ */
 function PlayerCards({ filter, setFilter }) {
   const t = useTheme()
-  const { roster, liveGame } = useData()
+  const { roster, liveGame, openPlayerProfile } = useData()
   const [flipped, setFlipped] = useState({})
-  const [profilePlayer, setProfilePlayer] = useState(null)
   const [teamId, setTeamId] = useState(119)
   const [teamRoster, setTeamRoster] = useState(null)
   const [allTeams, setAllTeams] = useState([])
@@ -2329,7 +2524,7 @@ function PlayerCards({ filter, setFilter }) {
                   </div>
                   <div style={{ padding: '8px 16px 12px', borderTop: `1px solid ${t.divider}` }}>
                     <button
-                      onClick={(e) => { e.stopPropagation(); setProfilePlayer(p) }}
+                      onClick={(e) => { e.stopPropagation(); openPlayerProfile(p) }}
                       style={{
                         width: '100%', padding: '10px', border: `1px solid ${t.accent}44`,
                         borderRadius: 10, background: `${t.accent}15`, color: t.accent,
@@ -2345,8 +2540,6 @@ function PlayerCards({ filter, setFilter }) {
         })}
       </div>
 
-      {/* Full profile modal */}
-      {profilePlayer && <PlayerProfile player={profilePlayer} onClose={() => setProfilePlayer(null)} />}
     </div>
   )
 }
@@ -3272,6 +3465,19 @@ function LiveBadge() {
   )
 }
 
+function PlayerLink({ playerId, playerName, playerType, children }) {
+  const { openPlayerProfile } = useData()
+  if (!playerId) return children
+  return (
+    <div
+      onClick={(e) => { e.stopPropagation(); openPlayerProfile({ id: playerId, name: playerName || '', type: playerType || 'batter' }) }}
+      style={{ cursor: 'pointer' }}
+    >
+      {children}
+    </div>
+  )
+}
+
 function PlayerHeadshot({ playerId, name, size = 80 }) {
   const t = useTheme()
   const url = `https://midfield.mlbstatic.com/v1/people/${playerId}/spots/120`
@@ -3428,8 +3634,19 @@ body { font-family: 'DM Sans', sans-serif; background: ${t.bg}; color: ${t.text}
   0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
   30% { opacity: 1; transform: translateY(-4px); }
 }
+@keyframes atBatGlow {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 16px ${t.accentGlow}; }
+}
+@keyframes atBatRing {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
 .live-dot { animation: pulse 1.5s ease-in-out infinite; }
 .live-badge { animation: pulse 2s ease-in-out infinite alternate; }
+.lineup-at-bat { animation: atBatGlow 2s ease-in-out infinite; }
+.at-bat-ring { animation: atBatRing 1.8s ease-in-out infinite; }
+.at-bat-badge { animation: pulse 2s ease-in-out infinite; }
 .player-card { cursor: pointer; transition: all 0.3s ease !important; }
 .player-card:hover { border-color: ${t.accent}44 !important; box-shadow: 0 4px 20px ${t.accentGlow} !important; }
 .social-card { transition: all 0.3s ease !important; }

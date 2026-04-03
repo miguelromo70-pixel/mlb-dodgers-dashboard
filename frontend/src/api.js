@@ -135,8 +135,56 @@ function parseLiveGame(data) {
       id: offense.batter?.id,
       avg: '',
     },
+    onDeck: {
+      name: offense.onDeck?.fullName || '',
+      id: offense.onDeck?.id,
+    },
+    inHole: {
+      name: offense.inHole?.fullName || '',
+      id: offense.inHole?.id,
+    },
+    inningHalf: ls.inningHalf || '',
     innings,
     plays: recentPlays,
+  }
+}
+
+// ── Game lineups from boxscore ──
+export async function getGameLineups(gamePk) {
+  try {
+    const data = await fetchJSON(`${BASE}/game/${gamePk}/boxscore`)
+    const parseTeam = (team) => {
+      const order = team?.battingOrder || []
+      const players = team?.players || {}
+      return order.map((id, i) => {
+        const p = players[`ID${id}`] || {}
+        const pos = p.position?.abbreviation || ''
+        const batting = p.stats?.batting || {}
+        const seasonBatting = p.seasonStats?.batting || {}
+        return {
+          id,
+          name: p.person?.fullName || '',
+          num: p.jerseyNumber || '',
+          pos,
+          order: i + 1,
+          gameStats: {
+            ab: batting.atBats ?? 0,
+            h: batting.hits ?? 0,
+            r: batting.runs ?? 0,
+            rbi: batting.rbi ?? 0,
+            bb: batting.baseOnBalls ?? 0,
+            so: batting.strikeOuts ?? 0,
+          },
+          avg: seasonBatting.avg || '',
+        }
+      })
+    }
+    return {
+      away: parseTeam(data.teams?.away),
+      home: parseTeam(data.teams?.home),
+    }
+  } catch {
+    return { away: [], home: [] }
   }
 }
 

@@ -1,0 +1,7 @@
+streamlit
+MLB-StatsAPI
+anthropic
+feedparser
+python-dotenv
+requests
+atproto

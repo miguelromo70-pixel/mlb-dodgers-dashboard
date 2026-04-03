@@ -971,7 +971,7 @@ function HomeCalendarPreview({ onNav }) {
 
 function HomeSection({ onNav }) {
   const t = useTheme()
-  const { liveGame, standings: st, recentGames: rg, news: nw, socialFeed: sf, loading } = useData()
+  const { liveGame, lineups, standings: st, recentGames: rg, news: nw, socialFeed: sf, loading } = useData()
   const g = liveGame || LIVE_GAME
   const standings = st?.length ? st : STANDINGS
   const recentGames = rg?.length ? rg : RECENT_GAMES
@@ -1062,6 +1062,20 @@ function HomeSection({ onNav }) {
           </div>
         </Card>
       </div>
+
+      {/* Lineup on home when live */}
+      {g.isLive && (lineups.away.length > 0 || lineups.home.length > 0) && (
+        <LineupCard
+          away={lineups.away} home={lineups.home}
+          awayAbbr={g.away.abbr} homeAbbr={g.home.abbr}
+          awayId={g.away.id} homeId={g.home.id}
+          isLive={g.isLive}
+          batterId={g.batter?.id}
+          onDeckId={g.onDeck?.id}
+          inHoleId={g.inHole?.id}
+          inningHalf={g.inningHalf}
+        />
+      )}
 
       {/* Highlights on home when live */}
       {g.isLive && <HomeHighlights />}

@@ -1344,8 +1344,6 @@ function LiveGame() {
           <div style={{ textAlign: 'center' }}><TeamLogo abbr={g.home.abbr} highlight /><div style={{ fontFamily: "'DM Sans'", fontSize: '0.75rem', fontWeight: 600, color: t.textMuted2, letterSpacing: '0.1em', marginTop: 8 }}>{g.home.abbr}</div></div>
         </div>
       </Card>
-      {/* Listen Live */}
-      {g.isLive && <LiveRadioBar />}
       <div className="grid-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
         <Card>
           <CardHeader>COUNT</CardHeader>
@@ -3858,53 +3856,6 @@ function BaseballFieldSVG({ defenders, runners, hitData }) {
         </g>
       )}
     </svg>
-  )
-}
-
-/* ═══════════════════════════════════════════
-   LIVE RADIO — DODGERS BROADCAST
-   ═══════════════════════════════════════════ */
-function LiveRadioBar() {
-  const t = useTheme()
-  const [expanded, setExpanded] = useState(false)
-
-  const streams = [
-    { label: 'AM 570 LA Sports', lang: 'EN', url: 'https://www.iheart.com/live/am-570-la-sports-702/' },
-    { label: '1020 KTNQ', lang: 'ES', url: 'https://www.audacy.com/ktnq' },
-    { label: 'MLB Gameday Audio', lang: 'EN/ES', url: 'https://www.mlb.com/live-stream-games/subscribe#checks' },
-  ]
-
-  return (
-    <div style={{
-      marginTop: 12, marginBottom: -4, padding: '10px 16px',
-      background: `linear-gradient(90deg, ${t.accent}15, ${t.cyan}10)`,
-      border: `1px solid ${t.accent}33`, borderRadius: 12,
-      display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-    }}>
-      <div className="live-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: t.red, boxShadow: `0 0 8px ${t.red}88`, flexShrink: 0 }} />
-      <span style={{ fontFamily: "'DM Sans'", fontSize: '0.72rem', fontWeight: 700, color: t.textWhite, letterSpacing: '0.04em' }}>LISTEN LIVE — DODGERS</span>
-      <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
-        {(expanded ? streams : streams.slice(0, 2)).map((s, i) => (
-          <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" style={{
-            padding: '5px 12px', borderRadius: 8, textDecoration: 'none',
-            background: t.inputBg, border: `1px solid ${t.cardBorder}`,
-            color: t.accent, fontFamily: "'DM Sans'", fontSize: '0.65rem', fontWeight: 700,
-            display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s ease',
-          }}>
-            <span style={{ fontSize: '0.9rem' }}>📻</span>
-            {s.label}
-            <span style={{ fontSize: '0.5rem', fontWeight: 600, color: t.textMuted, background: `${t.accent}15`, padding: '1px 4px', borderRadius: 3 }}>{s.lang}</span>
-          </a>
-        ))}
-        {!expanded && (
-          <button onClick={() => setExpanded(true)} style={{
-            padding: '5px 10px', borderRadius: 8, border: `1px solid ${t.cardBorder}`,
-            background: t.inputBg, color: t.textMuted, fontSize: '0.65rem', fontWeight: 600,
-            cursor: 'pointer', fontFamily: "'DM Sans'",
-          }}>+</button>
-        )}
-      </div>
-    </div>
   )
 }
 

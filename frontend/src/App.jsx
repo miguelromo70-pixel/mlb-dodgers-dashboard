@@ -3896,133 +3896,66 @@ const PITCH_TYPE_SHORT = {
 
 function PitchTrails3D({ pitches, title }) {
   const t = useTheme()
-  // 3D perspective: vanishing point at pitcher, strike zone in foreground
-  const VP = { x: 200, y: 20 } // vanishing point (pitcher's mound)
-  // Map plate coordinates to screen position near bottom
-  const mapToPlate = (pX, pZ) => {
-    const sx = 200 + pX * 70 // plate horizontal
-    const sy = 310 - (pZ - 0.5) * 65 // plate vertical (lower = higher pZ)
-    return { x: sx, y: sy }
-  }
-
-  // Zone box corners in screen space
+  const VP = { x: 150, y: 15 }
+  const mapToPlate = (pX, pZ) => ({ x: 150 + pX * 52, y: 230 - (pZ - 0.5) * 48 })
   const zTL = mapToPlate(-0.83, 3.5), zTR = mapToPlate(0.83, 3.5)
   const zBL = mapToPlate(-0.83, 1.5), zBR = mapToPlate(0.83, 1.5)
 
-  // Create perspective path for a pitch trail (3 control points from VP to plate)
   const trailPath = (pX, pZ) => {
     const end = mapToPlate(pX, pZ)
-    const mid = { x: (VP.x + end.x) / 2, y: (VP.y + end.y) / 2 + 30 }
+    const mid = { x: (VP.x + end.x) / 2, y: (VP.y + end.y) / 2 + 22 }
     return `M ${VP.x} ${VP.y} Q ${mid.x} ${mid.y} ${end.x} ${end.y}`
   }
-
-  // Get ball positions along the trail
-  const ballPositions = (pX, pZ, count = 5) => {
+  const ballPositions = (pX, pZ) => {
     const end = mapToPlate(pX, pZ)
-    return Array.from({ length: count }, (_, i) => {
-      const t = (i + 1) / (count + 1)
-      const mt = 1 - t
-      // Quadratic bezier
-      const mid = { x: (VP.x + end.x) / 2, y: (VP.y + end.y) / 2 + 30 }
-      return {
-        x: mt * mt * VP.x + 2 * mt * t * mid.x + t * t * end.x,
-        y: mt * mt * VP.y + 2 * mt * t * mid.y + t * t * end.y,
-        r: 2 + t * 4, // balls get bigger as they approach
-      }
+    const mid = { x: (VP.x + end.x) / 2, y: (VP.y + end.y) / 2 + 22 }
+    return Array.from({ length: 4 }, (_, i) => {
+      const p = (i + 1) / 5, q = 1 - p
+      return { x: q*q*VP.x + 2*q*p*mid.x + p*p*end.x, y: q*q*VP.y + 2*q*p*mid.y + p*p*end.y, r: 1.5 + p * 3 }
     })
   }
-
-  const pitchColor = (typeCode) => PITCH_TYPE_COLORS[typeCode] || t.textMuted
-
-  // Count pitch types
+  const pitchColor = (tc) => PITCH_TYPE_COLORS[tc] || t.textMuted
   const typeCounts = {}
-  pitches.forEach(p => {
-    const code = p.typeCode || '??'
-    if (!typeCounts[code]) typeCounts[code] = { count: 0, label: p.type, code }
-    typeCounts[code].count++
-  })
+  pitches.forEach(p => { const c = p.typeCode || '??'; if (!typeCounts[c]) typeCounts[c] = { count: 0, code: c }; typeCounts[c].count++ })
 
   return (
-    <div>
-      <svg viewBox="0 0 400 340" style={{ width: '100%', height: 'auto', display: 'block' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <svg viewBox="0 0 300 250" style={{ width: '100%', maxWidth: 340, height: 'auto', display: 'block' }}>
         <defs>
           <linearGradient id="moundGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={`${t.accent}08`} />
-            <stop offset="100%" stopColor={`${t.accent}02`} />
+            <stop offset="0%" stopColor={`${t.accent}06`} /><stop offset="100%" stopColor={`${t.accent}01`} />
           </linearGradient>
-          <filter id="ballGlow3d">
-            <feGaussianBlur stdDeviation="2" result="b" />
-            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
+          <filter id="ballGlow3d"><feGaussianBlur stdDeviation="1.5" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
         </defs>
-
-        {/* Background field perspective */}
-        <rect x="0" y="0" width="400" height="340" fill="url(#moundGrad)" rx="8" />
-
-        {/* Perspective ground lines */}
-        {[-2, -1, 0, 1, 2].map(i => (
-          <line key={i} x1={VP.x} y1={VP.y} x2={200 + i * 120} y2="340"
-            stroke={`${t.accent}08`} strokeWidth="0.5" />
-        ))}
-
-        {/* Strike zone (perspective trapezoid) */}
-        <polygon
-          points={`${zTL.x},${zTL.y} ${zTR.x},${zTR.y} ${zBR.x},${zBR.y} ${zBL.x},${zBL.y}`}
-          fill={`${t.accent}06`} stroke={`${t.accent}55`} strokeWidth="1.5"
-        />
-        {/* Zone grid 3x3 */}
+        <rect x="0" y="0" width="300" height="250" fill="url(#moundGrad)" rx="6" />
+        {[-1, 0, 1].map(i => <line key={i} x1={VP.x} y1={VP.y} x2={150 + i * 100} y2="250" stroke={`${t.accent}06`} strokeWidth="0.5" />)}
+        <polygon points={`${zTL.x},${zTL.y} ${zTR.x},${zTR.y} ${zBR.x},${zBR.y} ${zBL.x},${zBL.y}`} fill={`${t.accent}05`} stroke={`${t.accent}44`} strokeWidth="1" />
         {[1, 2].map(i => {
-          const frac = i / 3
-          const lx = zTL.x + (zTR.x - zTL.x) * frac, rx = zBL.x + (zBR.x - zBL.x) * frac
-          const ty = zTL.y + (zBL.y - zTL.y) * frac, by = zTR.y + (zBR.y - zTR.y) * frac
-          return (
-            <g key={i}>
-              <line x1={lx} y1={zTL.y + (zBL.y - zTL.y) * 0} x2={rx} y2={zBL.y} stroke={`${t.accent}22`} strokeWidth="0.5" />
-              <line x1={zTL.x} y1={ty} x2={zTR.x} y2={by} stroke={`${t.accent}22`} strokeWidth="0.5" />
-            </g>
-          )
+          const f = i / 3
+          return (<g key={i}>
+            <line x1={zTL.x + (zTR.x - zTL.x) * f} y1={zTL.y} x2={zBL.x + (zBR.x - zBL.x) * f} y2={zBL.y} stroke={`${t.accent}18`} strokeWidth="0.5" />
+            <line x1={zTL.x} y1={zTL.y + (zBL.y - zTL.y) * f} x2={zTR.x} y2={zTR.y + (zBR.y - zTR.y) * f} stroke={`${t.accent}18`} strokeWidth="0.5" />
+          </g>)
         })}
-
-        {/* Home plate */}
-        <polygon points="190,320 200,328 210,320 210,316 190,316" fill={`${t.textMuted}44`} stroke={`${t.textMuted}66`} strokeWidth="1" />
-
-        {/* Pitch trails */}
+        <polygon points="142,237 150,244 158,237 158,234 142,234" fill={`${t.textMuted}33`} stroke={`${t.textMuted}55`} strokeWidth="0.8" />
         {pitches.map((p, i) => {
           if (p.pX == null || p.pZ == null) return null
-          const color = pitchColor(p.typeCode)
-          const balls = ballPositions(p.pX, p.pZ, 6)
-          const endPos = mapToPlate(p.pX, p.pZ)
-          return (
-            <g key={i} opacity={0.85}>
-              {/* Trail line */}
-              <path d={trailPath(p.pX, p.pZ)} fill="none" stroke={color} strokeWidth="2" opacity="0.5" />
-              {/* Balls along trail */}
-              {balls.map((b, j) => (
-                <circle key={j} cx={b.x} cy={b.y} r={b.r} fill={color} opacity={0.3 + j * 0.1} />
-              ))}
-              {/* End ball (at plate) */}
-              <circle cx={endPos.x} cy={endPos.y} r={7} fill={color + 'cc'} stroke="#fff" strokeWidth="1.5" filter="url(#ballGlow3d)" />
-              {/* K label for strikeouts */}
-              {(p.callCode === 'C' || p.callCode === 'S') && (
-                <text x={endPos.x} y={endPos.y + 3.5} textAnchor="middle" fill="#fff" fontSize="8" fontWeight="800" fontFamily="JetBrains Mono">K</text>
-              )}
-            </g>
-          )
+          const color = pitchColor(p.typeCode), balls = ballPositions(p.pX, p.pZ), endPos = mapToPlate(p.pX, p.pZ)
+          return (<g key={i} opacity={0.8}>
+            <path d={trailPath(p.pX, p.pZ)} fill="none" stroke={color} strokeWidth="1.5" opacity="0.4" />
+            {balls.map((b, j) => <circle key={j} cx={b.x} cy={b.y} r={b.r} fill={color} opacity={0.25 + j * 0.12} />)}
+            <circle cx={endPos.x} cy={endPos.y} r={5.5} fill={color + 'cc'} stroke="#fff" strokeWidth="1" filter="url(#ballGlow3d)" />
+            {(p.callCode === 'C' || p.callCode === 'S') && <text x={endPos.x} y={endPos.y + 3} textAnchor="middle" fill="#fff" fontSize="6" fontWeight="800" fontFamily="JetBrains Mono">K</text>}
+          </g>)
         })}
-
-        {/* Title overlay */}
-        {title && (
-          <text x="12" y="22" fill={t.textWhite} fontSize="11" fontWeight="700" fontFamily="Oswald" letterSpacing="0.05em">{title}</text>
-        )}
+        {title && <text x="8" y="16" fill={t.textWhite} fontSize="9" fontWeight="700" fontFamily="Oswald" letterSpacing="0.04em" opacity="0.7">{title}</text>}
       </svg>
-
-      {/* Pitch type legend */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 8 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 6 }}>
         {Object.values(typeCounts).map(tc => (
-          <div key={tc.code} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: t.inputBg, borderRadius: 6, border: `1px solid ${t.cardBorder}` }}>
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: pitchColor(tc.code), boxShadow: `0 0 6px ${pitchColor(tc.code)}66` }} />
-            <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.58rem', fontWeight: 700, color: pitchColor(tc.code) }}>{PITCH_TYPE_SHORT[tc.code] || tc.code}</span>
-            <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.55rem', color: t.textMuted }}>{tc.count}</span>
+          <div key={tc.code} style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '2px 6px', background: t.inputBg, borderRadius: 4, border: `1px solid ${t.cardBorder}` }}>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: pitchColor(tc.code), boxShadow: `0 0 4px ${pitchColor(tc.code)}55` }} />
+            <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.52rem', fontWeight: 700, color: pitchColor(tc.code) }}>{PITCH_TYPE_SHORT[tc.code] || tc.code}</span>
+            <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.5rem', color: t.textMuted }}>{tc.count}</span>
           </div>
         ))}
       </div>
@@ -4034,10 +3967,8 @@ function SprayChart({ atBats, teamAbbr }) {
   const t = useTheme()
   const hits = atBats.filter(ab => ab.hitData?.coordX != null)
   if (hits.length === 0) return null
-
-  const mapX = (cx) => (cx / 250) * 300
-  const mapY = (cy) => (cy / 250) * 300
-
+  const mapX = (cx) => (cx / 250) * 240 + 5
+  const mapY = (cy) => (cy / 250) * 240 + 5
   const trajectoryColor = (traj) => {
     if (traj === 'fly_ball') return '#3B82F6'
     if (traj === 'line_drive') return '#22C55E'
@@ -4045,44 +3976,33 @@ function SprayChart({ atBats, teamAbbr }) {
     if (traj === 'popup') return '#A855F7'
     return t.textMuted
   }
-
   return (
-    <div>
-      <svg viewBox="0 0 300 280" style={{ width: '100%', height: 'auto', display: 'block' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <svg viewBox="0 0 250 230" style={{ width: '100%', maxWidth: 300, height: 'auto', display: 'block' }}>
         <defs>
-          <radialGradient id="sprayGrad" cx="50%" cy="90%" r="90%">
-            <stop offset="0%" stopColor={`${t.green}10`} />
-            <stop offset="100%" stopColor="transparent" />
+          <radialGradient id="sprayGrad" cx="50%" cy="90%" r="85%">
+            <stop offset="0%" stopColor={`${t.green}08`} /><stop offset="100%" stopColor="transparent" />
           </radialGradient>
         </defs>
-        {/* Field */}
-        <path d="M 10,250 Q 10,10 150,10 Q 290,10 290,250 Z" fill="url(#sprayGrad)" />
-        <line x1="150" y1="250" x2="10" y2="30" stroke={`${t.textMuted}22`} strokeWidth="1" />
-        <line x1="150" y1="250" x2="290" y2="30" stroke={`${t.textMuted}22`} strokeWidth="1" />
-        <path d="M 30,100 Q 150,0 270,100" fill="none" stroke={`${t.accent}22`} strokeWidth="1" strokeDasharray="4 4" />
-        <polygon points="150,140 200,185 150,230 100,185" fill="none" stroke={`${t.accent}15`} strokeWidth="0.5" />
-
-        {/* Hit trajectories */}
+        <path d="M 8,210 Q 8,8 125,8 Q 242,8 242,210 Z" fill="url(#sprayGrad)" />
+        <line x1="125" y1="210" x2="8" y2="25" stroke={`${t.textMuted}18`} strokeWidth="0.8" />
+        <line x1="125" y1="210" x2="242" y2="25" stroke={`${t.textMuted}18`} strokeWidth="0.8" />
+        <path d="M 25,85 Q 125,0 225,85" fill="none" stroke={`${t.accent}18`} strokeWidth="0.8" strokeDasharray="3 3" />
+        <polygon points="125,120 165,155 125,190 85,155" fill="none" stroke={`${t.accent}10`} strokeWidth="0.5" />
         {hits.map((ab, i) => {
-          const hd = ab.hitData
-          const ex = mapX(hd.coordX), ey = mapY(hd.coordY)
-          const color = trajectoryColor(hd.trajectory)
-          return (
-            <g key={i}>
-              <line x1="150" y1="250" x2={ex} y2={ey} stroke={color} strokeWidth="2.5" opacity="0.6" />
-              <circle cx={ex} cy={ey} r={6} fill={color + 'aa'} stroke="#fff" strokeWidth="1" />
-            </g>
-          )
+          const hd = ab.hitData, ex = mapX(hd.coordX), ey = mapY(hd.coordY), color = trajectoryColor(hd.trajectory)
+          return (<g key={i}>
+            <line x1="125" y1="210" x2={ex} y2={ey} stroke={color} strokeWidth="2" opacity="0.5" />
+            <circle cx={ex} cy={ey} r={4.5} fill={color + 'aa'} stroke="#fff" strokeWidth="0.8" />
+          </g>)
         })}
-        {/* Home plate */}
-        <polygon points="143,248 150,255 157,248 157,244 143,244" fill={`${t.textMuted}33`} stroke={`${t.textMuted}55`} strokeWidth="1" />
+        <polygon points="119,208 125,214 131,208 131,205 119,205" fill={`${t.textMuted}33`} stroke={`${t.textMuted}44`} strokeWidth="0.8" />
       </svg>
-      {/* Legend */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 8 }}>
-        {[['Fly Ball', '#3B82F6'], ['Line Drive', '#22C55E'], ['Ground Ball', '#EAB308'], ['Popup', '#A855F7']].map(([label, color]) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <div style={{ width: 10, height: 3, borderRadius: 1, background: color }} />
-            <span style={{ fontSize: '0.55rem', color: t.textMuted, fontWeight: 600 }}>{label}</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 6 }}>
+        {[['Fly', '#3B82F6'], ['Line', '#22C55E'], ['Ground', '#EAB308'], ['Popup', '#A855F7']].map(([l, c]) => (
+          <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <div style={{ width: 8, height: 2.5, borderRadius: 1, background: c }} />
+            <span style={{ fontSize: '0.5rem', color: t.textMuted, fontWeight: 600 }}>{l}</span>
           </div>
         ))}
       </div>

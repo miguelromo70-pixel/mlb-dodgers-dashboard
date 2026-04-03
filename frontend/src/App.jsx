@@ -1403,7 +1403,7 @@ function LiveGame() {
           <Card style={{ marginTop: 16 }}>
             <CardHeader>FIELD</CardHeader>
             <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <BaseballFieldSVG defenders={defenders} runners={g.runners} hitData={g.hitData} />
+              <BaseballFieldSVG defenders={defenders} runners={g.runners} hitData={g.hitData} batter={g.batter} />
             </div>
             {g.hitData && (
               <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t.divider}` }}>
@@ -1451,7 +1451,7 @@ function LiveGame() {
           inningHalf={g.inningHalf}
         />
       )}
-      <StatcastCard liveGame={g} lineups={lineups} />
+      <StatcastCard liveGame={g} />
       <HighlightsSection gamePk={selectedGamePk} />
       <Card style={{ marginTop: 16 }}>
         <CardHeader>RECENT PLAYS</CardHeader>
@@ -3764,7 +3764,7 @@ const FIELD_POSITIONS = {
   LF: { x: 55, y: 80 }, CF: { x: 150, y: 42 }, RF: { x: 245, y: 80 },
 }
 
-function BaseballFieldSVG({ defenders, runners, hitData }) {
+function BaseballFieldSVG({ defenders, runners, hitData, batter }) {
   const t = useTheme()
   // Map hit coordinates to SVG (API: ~250x250 space, home plate ~125,199)
   const mapHitX = (cx) => (cx / 250) * 300
@@ -3820,6 +3820,28 @@ function BaseballFieldSVG({ defenders, runners, hitData }) {
       ))}
       {/* Home plate */}
       <polygon points="143,248 150,255 157,248 157,244 143,244" fill={`${t.textMuted}33`} stroke={`${t.textMuted}55`} strokeWidth="1" />
+
+      {/* Batter at home plate */}
+      {batter?.id && (
+        <g>
+          <circle cx="165" cy="250" r={10} fill={`${t.cyan}33`} stroke={t.cyan} strokeWidth="1.5" className="at-bat-ring" />
+          <text x="165" y="253" textAnchor="middle" fill={t.cyan} fontSize="7" fontWeight="700" fontFamily="DM Sans">BAT</text>
+          <text x="165" y="266" textAnchor="middle" fill={t.cyan} fontSize="6.5" fontWeight="600" fontFamily="DM Sans">{(batter.name || '').split(' ').pop()}</text>
+        </g>
+      )}
+
+      {/* Runners on bases */}
+      {[
+        { x: 210, y: 175, on: runners?.first, name: runners?.firstName },
+        { x: 150, y: 128, on: runners?.second, name: runners?.secondName },
+        { x: 90, y: 175, on: runners?.third, name: runners?.thirdName },
+      ].map((r, i) => r.on && (
+        <g key={i}>
+          <circle cx={r.x} cy={r.y} r={9} fill={`${t.cyan}44`} stroke={t.cyan} strokeWidth="1.5" filter="url(#glow)" />
+          <text x={r.x} y={r.y + 3} textAnchor="middle" fill="#fff" fontSize="7" fontWeight="800" fontFamily="JetBrains Mono">R</text>
+          <text x={r.x} y={r.y - 14} textAnchor="middle" fill={t.cyan} fontSize="6.5" fontWeight="600" fontFamily="DM Sans">{(r.name || '').split(' ').pop()}</text>
+        </g>
+      ))}
 
       {/* Defensive players */}
       {defenders.map((d, i) => {
@@ -4008,7 +4030,7 @@ function PitchTrails3D({ pitches, title }) {
   )
 }
 
-function SprayChart({ atBats }) {
+function SprayChart({ atBats, teamAbbr }) {
   const t = useTheme()
   const hits = atBats.filter(ab => ab.hitData?.coordX != null)
   if (hits.length === 0) return null
@@ -4068,116 +4090,157 @@ function SprayChart({ atBats }) {
   )
 }
 
-function StatcastCard({ liveGame, lineups }) {
+function StatcastCard({ liveGame }) {
   const t = useTheme()
   const g = liveGame
   if (!g?.isLive && !g?.isFinal) return null
 
-  const [view, setView] = useState('current') // 'current' | 'batter' | 'spray'
-  const [selectedBatterId, setSelectedBatterId] = useState(null)
+  const [view, setView] = useState('spray') // 'spray' | 'arsenal'
+  const [sprayTeam, setSprayTeam] = useState('away') // which team's spray to show
+  const [arsenalSide, setArsenalSide] = useState('away') // which team's pitcher arsenal
 
   const allAB = g.allAtBats || []
-  // Which team is batting?
-  const battingTeam = g.inningHalf === 'Top' ? 'away' : 'home'
-  const battingLineup = battingTeam === 'away' ? lineups.away : lineups.home
-  const battingAbbr = battingTeam === 'away' ? g.away.abbr : g.home.abbr
-  const pitchingAbbr = battingTeam === 'away' ? g.home.abbr : g.away.abbr
+  const awayAbbr = g.away.abbr, homeAbbr = g.home.abbr
 
-  // At-bats for the batting team (current half inning + same team's previous ABs)
-  const teamBattingABs = allAB.filter(ab => {
-    const isBattingTeam = ab.halfInning === (battingTeam === 'away' ? 'top' : 'bottom')
-    return isBattingTeam
-  })
+  // ── SPRAY CHART data: filter by batting team ──
+  const awayBattingABs = allAB.filter(ab => ab.halfInning === 'top')
+  const homeBattingABs = allAB.filter(ab => ab.halfInning === 'bottom')
+  const sprayABs = sprayTeam === 'away' ? awayBattingABs : homeBattingABs
+  const sprayAbbr = sprayTeam === 'away' ? awayAbbr : homeAbbr
 
-  // At-bats for selected batter
-  const selectedBatterABs = selectedBatterId
-    ? allAB.filter(ab => ab.batterId === selectedBatterId)
-    : []
-  const selectedBatterName = selectedBatterABs[0]?.batterName || ''
-  const selectedBatterPitches = selectedBatterABs.flatMap(ab => ab.pitches)
+  // ── PITCHER ARSENAL data: group all pitches thrown by each pitcher ──
+  // Away pitchers pitch when halfInning === 'bottom', home pitchers when halfInning === 'top'
+  const getPitcherArsenal = (side) => {
+    const pitcherABs = allAB.filter(ab =>
+      side === 'home' ? ab.halfInning === 'top' : ab.halfInning === 'bottom'
+    )
+    // Group by pitcher
+    const pitcherMap = {}
+    pitcherABs.forEach(ab => {
+      if (!ab.pitcherId) return
+      if (!pitcherMap[ab.pitcherId]) {
+        pitcherMap[ab.pitcherId] = { id: ab.pitcherId, name: ab.pitcherName, pitches: [], abs: 0, ks: 0 }
+      }
+      pitcherMap[ab.pitcherId].abs++
+      if (ab.event === 'Strikeout') pitcherMap[ab.pitcherId].ks++
+      pitcherMap[ab.pitcherId].pitches.push(...ab.pitches)
+    })
+    return Object.values(pitcherMap)
+  }
 
-  // All pitches from the current at-bat
-  const currentPitches = g.currentAtBatPitches || []
+  const arsenalPitchers = getPitcherArsenal(arsenalSide)
+  const arsenalAbbr = arsenalSide === 'away' ? awayAbbr : homeAbbr
+  // Auto-select current pitcher if visible
+  const [selectedPitcherId, setSelectedPitcherId] = useState(null)
+  const activePitcher = selectedPitcherId
+    ? arsenalPitchers.find(p => p.id === selectedPitcherId)
+    : arsenalPitchers[arsenalPitchers.length - 1] // default to most recent pitcher
+
+  const shortName = (name) => {
+    const parts = name.split(' ')
+    return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(' ')}` : name
+  }
 
   return (
     <Card style={{ marginTop: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <CardHeader>STATCAST 3D</CardHeader>
-      </div>
-      {/* View tabs */}
+      <CardHeader>STATCAST 3D</CardHeader>
+
+      {/* Main view tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-        <FilterBtn active={view === 'current'} onClick={() => setView('current')}>⚾ CURRENT AB</FilterBtn>
-        <FilterBtn active={view === 'batter'} onClick={() => setView('batter')}>🏏 BATTER VIEW</FilterBtn>
         <FilterBtn active={view === 'spray'} onClick={() => setView('spray')}>📊 SPRAY CHART</FilterBtn>
+        <FilterBtn active={view === 'arsenal'} onClick={() => setView('arsenal')}>⚾ PITCHER ARSENAL</FilterBtn>
       </div>
 
-      {/* CURRENT AT-BAT — Statcast pitch trail */}
-      {view === 'current' && (
-        currentPitches.length > 0 ? (
-          <PitchTrails3D
-            pitches={currentPitches}
-            title={`${g.batter?.name || 'Batter'} vs ${g.pitcher?.name || 'Pitcher'}`}
-          />
-        ) : (
-          <div style={{ textAlign: 'center', padding: 40, color: t.textMuted2, fontSize: '0.82rem' }}>
-            Waiting for first pitch...
-          </div>
-        )
-      )}
-
-      {/* BATTER VIEW — select a batter, see all their at-bat pitches */}
-      {view === 'batter' && (<>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-          {battingLineup.map(p => (
-            <button key={p.id} onClick={() => setSelectedBatterId(p.id)} style={{
-              padding: '5px 10px', borderRadius: 8, cursor: 'pointer',
-              border: `1px solid ${selectedBatterId === p.id ? t.accent + '66' : t.cardBorder}`,
-              background: selectedBatterId === p.id ? `${t.accent}22` : t.inputBg,
-              color: selectedBatterId === p.id ? t.accent : t.textMuted2,
-              fontFamily: "'DM Sans'", fontSize: '0.65rem', fontWeight: 600,
-              display: 'flex', alignItems: 'center', gap: 4,
-            }}>
-              <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.55rem', color: t.textMuted }}>{p.order}</span>
-              {p.name.split(' ').length > 1 ? `${p.name.split(' ')[0][0]}. ${p.name.split(' ').slice(1).join(' ')}` : p.name}
-            </button>
-          ))}
+      {/* ═══ SPRAY CHART ═══ */}
+      {view === 'spray' && (<>
+        {/* Team selector */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+          <FilterBtn active={sprayTeam === 'away'} onClick={() => setSprayTeam('away')}>{awayAbbr}</FilterBtn>
+          <FilterBtn active={sprayTeam === 'home'} onClick={() => setSprayTeam('home')}>{homeAbbr}</FilterBtn>
         </div>
-        {selectedBatterId && selectedBatterPitches.length > 0 ? (
-          <>
-            <PitchTrails3D
-              pitches={selectedBatterPitches}
-              title={`${selectedBatterName} — ${selectedBatterABs.length} AB${selectedBatterABs.length > 1 ? 's' : ''}`}
-            />
-            {/* At-bat results */}
-            <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {selectedBatterABs.map((ab, i) => (
-                <div key={i} style={{
-                  padding: '4px 10px', borderRadius: 6, fontSize: '0.6rem', fontWeight: 700,
-                  background: ab.isOut ? `${t.red}15` : `${t.green}15`,
-                  color: ab.isOut ? t.red : t.green,
-                  border: `1px solid ${ab.isOut ? t.red + '33' : t.green + '33'}`,
-                  fontFamily: "'JetBrains Mono'",
-                }}>
-                  {ab.event} {ab.rbi > 0 ? `(${ab.rbi} RBI)` : ''}
+
+        {sprayABs.some(ab => ab.hitData?.coordX != null) ? (
+          <SprayChart atBats={sprayABs} teamAbbr={sprayAbbr} />
+        ) : (
+          <div style={{ textAlign: 'center', padding: 30, color: t.textMuted2, fontSize: '0.82rem' }}>No balls in play yet for {sprayAbbr}</div>
+        )}
+
+        {/* At-bat results list */}
+        {sprayABs.length > 0 && (
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${t.divider}` }}>
+            <div style={{ fontSize: '0.58rem', fontWeight: 700, color: t.textMuted, letterSpacing: '0.1em', marginBottom: 8 }}>{sprayAbbr} AT-BATS</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
+              {sprayABs.map((ab, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 6, background: i % 2 === 0 ? `${t.accent}06` : 'transparent' }}>
+                  <PlayerHeadshot playerId={ab.batterId} name={ab.batterName} size={22} />
+                  <span style={{ fontSize: '0.7rem', fontWeight: 600, color: t.textStrong, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shortName(ab.batterName)}</span>
+                  <span style={{
+                    fontSize: '0.55rem', fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                    fontFamily: "'JetBrains Mono'",
+                    background: ab.isOut ? `${t.red}12` : `${t.green}12`,
+                    color: ab.isOut ? t.red : t.green,
+                    border: `1px solid ${ab.isOut ? t.red + '22' : t.green + '22'}`,
+                  }}>{ab.event}{ab.rbi > 0 ? ` (${ab.rbi}RBI)` : ''}</span>
+                  <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.55rem', color: t.textMuted }}>{ab.pitches.length}P</span>
                 </div>
               ))}
             </div>
-          </>
-        ) : selectedBatterId ? (
-          <div style={{ textAlign: 'center', padding: 30, color: t.textMuted2, fontSize: '0.82rem' }}>No at-bats yet</div>
-        ) : (
-          <div style={{ textAlign: 'center', padding: 30, color: t.textMuted2, fontSize: '0.82rem' }}>Select a batter to view their pitches</div>
+          </div>
         )}
       </>)}
 
-      {/* SPRAY CHART — all hits */}
-      {view === 'spray' && (
-        allAB.some(ab => ab.hitData?.coordX != null) ? (
-          <SprayChart atBats={allAB} />
+      {/* ═══ PITCHER ARSENAL ═══ */}
+      {view === 'arsenal' && (<>
+        {/* Team selector */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          <FilterBtn active={arsenalSide === 'away'} onClick={() => { setArsenalSide('away'); setSelectedPitcherId(null) }}>{awayAbbr} P</FilterBtn>
+          <FilterBtn active={arsenalSide === 'home'} onClick={() => { setArsenalSide('home'); setSelectedPitcherId(null) }}>{homeAbbr} P</FilterBtn>
+        </div>
+
+        {/* Pitcher selector */}
+        {arsenalPitchers.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+            {arsenalPitchers.map(p => {
+              const isActive = activePitcher?.id === p.id
+              return (
+                <button key={p.id} onClick={() => setSelectedPitcherId(p.id)} style={{
+                  padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
+                  border: `1px solid ${isActive ? t.accent + '66' : t.cardBorder}`,
+                  background: isActive ? `${t.accent}22` : t.inputBg,
+                  color: isActive ? t.accent : t.textMuted2,
+                  fontFamily: "'DM Sans'", fontSize: '0.68rem', fontWeight: 600,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                  <PlayerHeadshot playerId={p.id} name={p.name} size={20} />
+                  {shortName(p.name)}
+                  <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.5rem', color: t.textMuted, background: `${t.accent}12`, padding: '1px 4px', borderRadius: 3 }}>{p.pitches.length}P</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {activePitcher && activePitcher.pitches.length > 0 ? (
+          <>
+            <PitchTrails3D
+              pitches={activePitcher.pitches}
+              title={`${activePitcher.name} — ${activePitcher.pitches.length} pitches · ${activePitcher.ks} K`}
+            />
+            {/* Pitcher summary */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, paddingTop: 8, borderTop: `1px solid ${t.divider}` }}>
+              <StatMini label="PITCHES" value={activePitcher.pitches.length} />
+              <StatMini label="AB" value={activePitcher.abs} />
+              <StatMini label="K" value={activePitcher.ks} />
+              <StatMini label="STRIKES" value={activePitcher.pitches.filter(p => p.isStrike || p.isInPlay).length} />
+              <StatMini label="BALLS" value={activePitcher.pitches.filter(p => p.isBall).length} />
+            </div>
+          </>
         ) : (
-          <div style={{ textAlign: 'center', padding: 40, color: t.textMuted2, fontSize: '0.82rem' }}>No balls in play yet</div>
-        )
-      )}
+          <div style={{ textAlign: 'center', padding: 30, color: t.textMuted2, fontSize: '0.82rem' }}>
+            {arsenalPitchers.length === 0 ? `No pitches yet for ${arsenalAbbr}` : 'Select a pitcher'}
+          </div>
+        )}
+      </>)}
     </Card>
   )
 }

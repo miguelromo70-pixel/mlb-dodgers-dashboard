@@ -1344,6 +1344,8 @@ function LiveGame() {
           <div style={{ textAlign: 'center' }}><TeamLogo abbr={g.home.abbr} highlight /><div style={{ fontFamily: "'DM Sans'", fontSize: '0.75rem', fontWeight: 600, color: t.textMuted2, letterSpacing: '0.1em', marginTop: 8 }}>{g.home.abbr}</div></div>
         </div>
       </Card>
+      {/* Listen Live */}
+      {g.isLive && <LiveRadioBar />}
       <div className="grid-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
         <Card>
           <CardHeader>COUNT</CardHeader>
@@ -1451,6 +1453,7 @@ function LiveGame() {
           inningHalf={g.inningHalf}
         />
       )}
+      <StatcastCard liveGame={g} lineups={lineups} />
       <HighlightsSection gamePk={selectedGamePk} />
       <Card style={{ marginTop: 16 }}>
         <CardHeader>RECENT PLAYS</CardHeader>
@@ -3855,6 +3858,376 @@ function BaseballFieldSVG({ defenders, runners, hitData }) {
         </g>
       )}
     </svg>
+  )
+}
+
+/* ═══════════════════════════════════════════
+   LIVE RADIO — DODGERS BROADCAST
+   ═══════════════════════════════════════════ */
+function LiveRadioBar() {
+  const t = useTheme()
+  const [expanded, setExpanded] = useState(false)
+
+  const streams = [
+    { label: 'AM 570 LA Sports', lang: 'EN', url: 'https://www.iheart.com/live/am-570-la-sports-702/' },
+    { label: '1020 KTNQ', lang: 'ES', url: 'https://www.audacy.com/ktnq' },
+    { label: 'MLB Gameday Audio', lang: 'EN/ES', url: 'https://www.mlb.com/live-stream-games/subscribe#checks' },
+  ]
+
+  return (
+    <div style={{
+      marginTop: 12, marginBottom: -4, padding: '10px 16px',
+      background: `linear-gradient(90deg, ${t.accent}15, ${t.cyan}10)`,
+      border: `1px solid ${t.accent}33`, borderRadius: 12,
+      display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+    }}>
+      <div className="live-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: t.red, boxShadow: `0 0 8px ${t.red}88`, flexShrink: 0 }} />
+      <span style={{ fontFamily: "'DM Sans'", fontSize: '0.72rem', fontWeight: 700, color: t.textWhite, letterSpacing: '0.04em' }}>LISTEN LIVE — DODGERS</span>
+      <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
+        {(expanded ? streams : streams.slice(0, 2)).map((s, i) => (
+          <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" style={{
+            padding: '5px 12px', borderRadius: 8, textDecoration: 'none',
+            background: t.inputBg, border: `1px solid ${t.cardBorder}`,
+            color: t.accent, fontFamily: "'DM Sans'", fontSize: '0.65rem', fontWeight: 700,
+            display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s ease',
+          }}>
+            <span style={{ fontSize: '0.9rem' }}>📻</span>
+            {s.label}
+            <span style={{ fontSize: '0.5rem', fontWeight: 600, color: t.textMuted, background: `${t.accent}15`, padding: '1px 4px', borderRadius: 3 }}>{s.lang}</span>
+          </a>
+        ))}
+        {!expanded && (
+          <button onClick={() => setExpanded(true)} style={{
+            padding: '5px 10px', borderRadius: 8, border: `1px solid ${t.cardBorder}`,
+            background: t.inputBg, color: t.textMuted, fontSize: '0.65rem', fontWeight: 600,
+            cursor: 'pointer', fontFamily: "'DM Sans'",
+          }}>+</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════
+   STATCAST 3D — PITCH TRAILS + SPRAY CHART + AT-BAT VIEWER
+   ═══════════════════════════════════════════ */
+const PITCH_TYPE_COLORS = {
+  FF: '#EF4444', SI: '#F97316', FC: '#A855F7', CH: '#22C55E',
+  SL: '#EAB308', CU: '#06B6D4', FS: '#EC4899', KC: '#06B6D4',
+  ST: '#EAB308', SV: '#EAB308', KN: '#8B5CF6',
+}
+const PITCH_TYPE_SHORT = {
+  FF: '4S', SI: 'SI', FC: 'FC', CH: 'CH', SL: 'SL', CU: 'CU',
+  FS: 'FS', KC: 'KC', ST: 'SW', SV: 'SV', KN: 'KN',
+}
+
+function PitchTrails3D({ pitches, title }) {
+  const t = useTheme()
+  // 3D perspective: vanishing point at pitcher, strike zone in foreground
+  const VP = { x: 200, y: 20 } // vanishing point (pitcher's mound)
+  // Map plate coordinates to screen position near bottom
+  const mapToPlate = (pX, pZ) => {
+    const sx = 200 + pX * 70 // plate horizontal
+    const sy = 310 - (pZ - 0.5) * 65 // plate vertical (lower = higher pZ)
+    return { x: sx, y: sy }
+  }
+
+  // Zone box corners in screen space
+  const zTL = mapToPlate(-0.83, 3.5), zTR = mapToPlate(0.83, 3.5)
+  const zBL = mapToPlate(-0.83, 1.5), zBR = mapToPlate(0.83, 1.5)
+
+  // Create perspective path for a pitch trail (3 control points from VP to plate)
+  const trailPath = (pX, pZ) => {
+    const end = mapToPlate(pX, pZ)
+    const mid = { x: (VP.x + end.x) / 2, y: (VP.y + end.y) / 2 + 30 }
+    return `M ${VP.x} ${VP.y} Q ${mid.x} ${mid.y} ${end.x} ${end.y}`
+  }
+
+  // Get ball positions along the trail
+  const ballPositions = (pX, pZ, count = 5) => {
+    const end = mapToPlate(pX, pZ)
+    return Array.from({ length: count }, (_, i) => {
+      const t = (i + 1) / (count + 1)
+      const mt = 1 - t
+      // Quadratic bezier
+      const mid = { x: (VP.x + end.x) / 2, y: (VP.y + end.y) / 2 + 30 }
+      return {
+        x: mt * mt * VP.x + 2 * mt * t * mid.x + t * t * end.x,
+        y: mt * mt * VP.y + 2 * mt * t * mid.y + t * t * end.y,
+        r: 2 + t * 4, // balls get bigger as they approach
+      }
+    })
+  }
+
+  const pitchColor = (typeCode) => PITCH_TYPE_COLORS[typeCode] || t.textMuted
+
+  // Count pitch types
+  const typeCounts = {}
+  pitches.forEach(p => {
+    const code = p.typeCode || '??'
+    if (!typeCounts[code]) typeCounts[code] = { count: 0, label: p.type, code }
+    typeCounts[code].count++
+  })
+
+  return (
+    <div>
+      <svg viewBox="0 0 400 340" style={{ width: '100%', height: 'auto', display: 'block' }}>
+        <defs>
+          <linearGradient id="moundGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={`${t.accent}08`} />
+            <stop offset="100%" stopColor={`${t.accent}02`} />
+          </linearGradient>
+          <filter id="ballGlow3d">
+            <feGaussianBlur stdDeviation="2" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        {/* Background field perspective */}
+        <rect x="0" y="0" width="400" height="340" fill="url(#moundGrad)" rx="8" />
+
+        {/* Perspective ground lines */}
+        {[-2, -1, 0, 1, 2].map(i => (
+          <line key={i} x1={VP.x} y1={VP.y} x2={200 + i * 120} y2="340"
+            stroke={`${t.accent}08`} strokeWidth="0.5" />
+        ))}
+
+        {/* Strike zone (perspective trapezoid) */}
+        <polygon
+          points={`${zTL.x},${zTL.y} ${zTR.x},${zTR.y} ${zBR.x},${zBR.y} ${zBL.x},${zBL.y}`}
+          fill={`${t.accent}06`} stroke={`${t.accent}55`} strokeWidth="1.5"
+        />
+        {/* Zone grid 3x3 */}
+        {[1, 2].map(i => {
+          const frac = i / 3
+          const lx = zTL.x + (zTR.x - zTL.x) * frac, rx = zBL.x + (zBR.x - zBL.x) * frac
+          const ty = zTL.y + (zBL.y - zTL.y) * frac, by = zTR.y + (zBR.y - zTR.y) * frac
+          return (
+            <g key={i}>
+              <line x1={lx} y1={zTL.y + (zBL.y - zTL.y) * 0} x2={rx} y2={zBL.y} stroke={`${t.accent}22`} strokeWidth="0.5" />
+              <line x1={zTL.x} y1={ty} x2={zTR.x} y2={by} stroke={`${t.accent}22`} strokeWidth="0.5" />
+            </g>
+          )
+        })}
+
+        {/* Home plate */}
+        <polygon points="190,320 200,328 210,320 210,316 190,316" fill={`${t.textMuted}44`} stroke={`${t.textMuted}66`} strokeWidth="1" />
+
+        {/* Pitch trails */}
+        {pitches.map((p, i) => {
+          if (p.pX == null || p.pZ == null) return null
+          const color = pitchColor(p.typeCode)
+          const balls = ballPositions(p.pX, p.pZ, 6)
+          const endPos = mapToPlate(p.pX, p.pZ)
+          return (
+            <g key={i} opacity={0.85}>
+              {/* Trail line */}
+              <path d={trailPath(p.pX, p.pZ)} fill="none" stroke={color} strokeWidth="2" opacity="0.5" />
+              {/* Balls along trail */}
+              {balls.map((b, j) => (
+                <circle key={j} cx={b.x} cy={b.y} r={b.r} fill={color} opacity={0.3 + j * 0.1} />
+              ))}
+              {/* End ball (at plate) */}
+              <circle cx={endPos.x} cy={endPos.y} r={7} fill={color + 'cc'} stroke="#fff" strokeWidth="1.5" filter="url(#ballGlow3d)" />
+              {/* K label for strikeouts */}
+              {(p.callCode === 'C' || p.callCode === 'S') && (
+                <text x={endPos.x} y={endPos.y + 3.5} textAnchor="middle" fill="#fff" fontSize="8" fontWeight="800" fontFamily="JetBrains Mono">K</text>
+              )}
+            </g>
+          )
+        })}
+
+        {/* Title overlay */}
+        {title && (
+          <text x="12" y="22" fill={t.textWhite} fontSize="11" fontWeight="700" fontFamily="Oswald" letterSpacing="0.05em">{title}</text>
+        )}
+      </svg>
+
+      {/* Pitch type legend */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 8 }}>
+        {Object.values(typeCounts).map(tc => (
+          <div key={tc.code} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', background: t.inputBg, borderRadius: 6, border: `1px solid ${t.cardBorder}` }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: pitchColor(tc.code), boxShadow: `0 0 6px ${pitchColor(tc.code)}66` }} />
+            <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.58rem', fontWeight: 700, color: pitchColor(tc.code) }}>{PITCH_TYPE_SHORT[tc.code] || tc.code}</span>
+            <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.55rem', color: t.textMuted }}>{tc.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SprayChart({ atBats }) {
+  const t = useTheme()
+  const hits = atBats.filter(ab => ab.hitData?.coordX != null)
+  if (hits.length === 0) return null
+
+  const mapX = (cx) => (cx / 250) * 300
+  const mapY = (cy) => (cy / 250) * 300
+
+  const trajectoryColor = (traj) => {
+    if (traj === 'fly_ball') return '#3B82F6'
+    if (traj === 'line_drive') return '#22C55E'
+    if (traj === 'ground_ball') return '#EAB308'
+    if (traj === 'popup') return '#A855F7'
+    return t.textMuted
+  }
+
+  return (
+    <div>
+      <svg viewBox="0 0 300 280" style={{ width: '100%', height: 'auto', display: 'block' }}>
+        <defs>
+          <radialGradient id="sprayGrad" cx="50%" cy="90%" r="90%">
+            <stop offset="0%" stopColor={`${t.green}10`} />
+            <stop offset="100%" stopColor="transparent" />
+          </radialGradient>
+        </defs>
+        {/* Field */}
+        <path d="M 10,250 Q 10,10 150,10 Q 290,10 290,250 Z" fill="url(#sprayGrad)" />
+        <line x1="150" y1="250" x2="10" y2="30" stroke={`${t.textMuted}22`} strokeWidth="1" />
+        <line x1="150" y1="250" x2="290" y2="30" stroke={`${t.textMuted}22`} strokeWidth="1" />
+        <path d="M 30,100 Q 150,0 270,100" fill="none" stroke={`${t.accent}22`} strokeWidth="1" strokeDasharray="4 4" />
+        <polygon points="150,140 200,185 150,230 100,185" fill="none" stroke={`${t.accent}15`} strokeWidth="0.5" />
+
+        {/* Hit trajectories */}
+        {hits.map((ab, i) => {
+          const hd = ab.hitData
+          const ex = mapX(hd.coordX), ey = mapY(hd.coordY)
+          const color = trajectoryColor(hd.trajectory)
+          return (
+            <g key={i}>
+              <line x1="150" y1="250" x2={ex} y2={ey} stroke={color} strokeWidth="2.5" opacity="0.6" />
+              <circle cx={ex} cy={ey} r={6} fill={color + 'aa'} stroke="#fff" strokeWidth="1" />
+            </g>
+          )
+        })}
+        {/* Home plate */}
+        <polygon points="143,248 150,255 157,248 157,244 143,244" fill={`${t.textMuted}33`} stroke={`${t.textMuted}55`} strokeWidth="1" />
+      </svg>
+      {/* Legend */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 8 }}>
+        {[['Fly Ball', '#3B82F6'], ['Line Drive', '#22C55E'], ['Ground Ball', '#EAB308'], ['Popup', '#A855F7']].map(([label, color]) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ width: 10, height: 3, borderRadius: 1, background: color }} />
+            <span style={{ fontSize: '0.55rem', color: t.textMuted, fontWeight: 600 }}>{label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function StatcastCard({ liveGame, lineups }) {
+  const t = useTheme()
+  const g = liveGame
+  if (!g?.isLive && !g?.isFinal) return null
+
+  const [view, setView] = useState('current') // 'current' | 'batter' | 'spray'
+  const [selectedBatterId, setSelectedBatterId] = useState(null)
+
+  const allAB = g.allAtBats || []
+  // Which team is batting?
+  const battingTeam = g.inningHalf === 'Top' ? 'away' : 'home'
+  const battingLineup = battingTeam === 'away' ? lineups.away : lineups.home
+  const battingAbbr = battingTeam === 'away' ? g.away.abbr : g.home.abbr
+  const pitchingAbbr = battingTeam === 'away' ? g.home.abbr : g.away.abbr
+
+  // At-bats for the batting team (current half inning + same team's previous ABs)
+  const teamBattingABs = allAB.filter(ab => {
+    const isBattingTeam = ab.halfInning === (battingTeam === 'away' ? 'top' : 'bottom')
+    return isBattingTeam
+  })
+
+  // At-bats for selected batter
+  const selectedBatterABs = selectedBatterId
+    ? allAB.filter(ab => ab.batterId === selectedBatterId)
+    : []
+  const selectedBatterName = selectedBatterABs[0]?.batterName || ''
+  const selectedBatterPitches = selectedBatterABs.flatMap(ab => ab.pitches)
+
+  // All pitches from the current at-bat
+  const currentPitches = g.currentAtBatPitches || []
+
+  return (
+    <Card style={{ marginTop: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <CardHeader>STATCAST 3D</CardHeader>
+      </div>
+      {/* View tabs */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+        <FilterBtn active={view === 'current'} onClick={() => setView('current')}>⚾ CURRENT AB</FilterBtn>
+        <FilterBtn active={view === 'batter'} onClick={() => setView('batter')}>🏏 BATTER VIEW</FilterBtn>
+        <FilterBtn active={view === 'spray'} onClick={() => setView('spray')}>📊 SPRAY CHART</FilterBtn>
+      </div>
+
+      {/* CURRENT AT-BAT — Statcast pitch trail */}
+      {view === 'current' && (
+        currentPitches.length > 0 ? (
+          <PitchTrails3D
+            pitches={currentPitches}
+            title={`${g.batter?.name || 'Batter'} vs ${g.pitcher?.name || 'Pitcher'}`}
+          />
+        ) : (
+          <div style={{ textAlign: 'center', padding: 40, color: t.textMuted2, fontSize: '0.82rem' }}>
+            Waiting for first pitch...
+          </div>
+        )
+      )}
+
+      {/* BATTER VIEW — select a batter, see all their at-bat pitches */}
+      {view === 'batter' && (<>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+          {battingLineup.map(p => (
+            <button key={p.id} onClick={() => setSelectedBatterId(p.id)} style={{
+              padding: '5px 10px', borderRadius: 8, cursor: 'pointer',
+              border: `1px solid ${selectedBatterId === p.id ? t.accent + '66' : t.cardBorder}`,
+              background: selectedBatterId === p.id ? `${t.accent}22` : t.inputBg,
+              color: selectedBatterId === p.id ? t.accent : t.textMuted2,
+              fontFamily: "'DM Sans'", fontSize: '0.65rem', fontWeight: 600,
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.55rem', color: t.textMuted }}>{p.order}</span>
+              {p.name.split(' ').length > 1 ? `${p.name.split(' ')[0][0]}. ${p.name.split(' ').slice(1).join(' ')}` : p.name}
+            </button>
+          ))}
+        </div>
+        {selectedBatterId && selectedBatterPitches.length > 0 ? (
+          <>
+            <PitchTrails3D
+              pitches={selectedBatterPitches}
+              title={`${selectedBatterName} — ${selectedBatterABs.length} AB${selectedBatterABs.length > 1 ? 's' : ''}`}
+            />
+            {/* At-bat results */}
+            <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {selectedBatterABs.map((ab, i) => (
+                <div key={i} style={{
+                  padding: '4px 10px', borderRadius: 6, fontSize: '0.6rem', fontWeight: 700,
+                  background: ab.isOut ? `${t.red}15` : `${t.green}15`,
+                  color: ab.isOut ? t.red : t.green,
+                  border: `1px solid ${ab.isOut ? t.red + '33' : t.green + '33'}`,
+                  fontFamily: "'JetBrains Mono'",
+                }}>
+                  {ab.event} {ab.rbi > 0 ? `(${ab.rbi} RBI)` : ''}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : selectedBatterId ? (
+          <div style={{ textAlign: 'center', padding: 30, color: t.textMuted2, fontSize: '0.82rem' }}>No at-bats yet</div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: 30, color: t.textMuted2, fontSize: '0.82rem' }}>Select a batter to view their pitches</div>
+        )}
+      </>)}
+
+      {/* SPRAY CHART — all hits */}
+      {view === 'spray' && (
+        allAB.some(ab => ab.hitData?.coordX != null) ? (
+          <SprayChart atBats={allAB} />
+        ) : (
+          <div style={{ textAlign: 'center', padding: 40, color: t.textMuted2, fontSize: '0.82rem' }}>No balls in play yet</div>
+        )
+      )}
+    </Card>
   )
 }
 

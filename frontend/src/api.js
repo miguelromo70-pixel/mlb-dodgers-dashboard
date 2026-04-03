@@ -92,6 +92,45 @@ function parseLiveGame(data) {
     rbi: play.result?.rbi || 0,
   }))
 
+  // ── All at-bats with pitch data (for Statcast replay) ──
+  const allAtBats = allPlays.filter(p => p.about && p.result).map(play => {
+    const pitches = (play.playEvents || []).filter(e => e.isPitch).map(e => ({
+      speed: e.pitchData?.startSpeed || null,
+      type: e.details?.type?.description || '',
+      typeCode: e.details?.type?.code || '',
+      call: e.details?.call?.description || '',
+      callCode: e.details?.call?.code || '',
+      isStrike: e.details?.isStrike || false,
+      isBall: e.details?.isBall || false,
+      isInPlay: e.details?.isInPlay || false,
+      pX: e.pitchData?.coordinates?.pX ?? null,
+      pZ: e.pitchData?.coordinates?.pZ ?? null,
+      zone: e.pitchData?.zone ?? null,
+    }))
+    const hitEvent = [...(play.playEvents || [])].reverse().find(e => e.hitData?.coordinates?.coordX)
+    return {
+      batterId: play.matchup?.batter?.id,
+      batterName: play.matchup?.batter?.fullName || '',
+      pitcherId: play.matchup?.pitcher?.id,
+      pitcherName: play.matchup?.pitcher?.fullName || '',
+      inning: play.about?.inning,
+      halfInning: play.about?.halfInning,
+      event: play.result?.event || '',
+      description: play.result?.description || '',
+      isOut: play.result?.isOut || false,
+      rbi: play.result?.rbi || 0,
+      pitches,
+      hitData: hitEvent ? {
+        launchSpeed: hitEvent.hitData.launchSpeed || null,
+        launchAngle: hitEvent.hitData.launchAngle || null,
+        totalDistance: hitEvent.hitData.totalDistance || null,
+        trajectory: hitEvent.hitData.trajectory || '',
+        coordX: hitEvent.hitData.coordinates?.coordX ?? null,
+        coordY: hitEvent.hitData.coordinates?.coordY ?? null,
+      } : null,
+    }
+  })
+
   // ── Current play pitch-by-pitch data ──
   const currentPlay = ld.plays?.currentPlay || {}
   const playEvents = currentPlay.playEvents || []
@@ -197,6 +236,7 @@ function parseLiveGame(data) {
     lastPitch,
     currentAtBatPitches,
     hitData,
+    allAtBats,
     innings,
     plays: recentPlays,
   }

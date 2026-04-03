@@ -1,0 +1,8 @@
+[build]
+builder = "nixpacks"
+nixpacksConfigPath = "nixpacks.toml"
+
+[deploy]
+startCommand = "node node_modules/.bin/serve frontend/dist -s -l tcp://0.0.0.0:${PORT:-3000}"
+healthcheckPath = "/"
+restartPolicyType = "ON_FAILURE"

@@ -2884,18 +2884,35 @@ function CalendarSection() {
                     onClick={() => hasGame && setSelectedDay(isSelected ? null : day)}
                     style={{
                       padding: '6px 4px', borderRadius: 10, minHeight: 78, cursor: hasGame ? 'pointer' : 'default',
-                      background: isSelected ? `${t.accent}18` : isToday ? `${t.accent}0a` : 'transparent',
-                      border: `1px solid ${isSelected ? t.accent + '44' : isToday ? t.accent + '22' : t.divider}`,
-                      borderLeft: hasGame ? `3px solid ${homeAwayColor}` : `1px solid ${isSelected ? t.accent + '44' : isToday ? t.accent + '22' : t.divider}`,
+                      background: isSelected ? `${t.accent}18` : isToday ? `${t.accent}12` : 'transparent',
+                      border: isToday ? `2px solid ${t.accent}88` : `1px solid ${isSelected ? t.accent + '44' : t.divider}`,
+                      borderLeft: hasGame && !isToday ? `3px solid ${homeAwayColor}` : undefined,
+                      boxShadow: isToday ? `0 0 16px ${t.accentGlow}, inset 0 0 20px ${t.accent}08` : 'none',
                       transition: 'all 0.2s ease',
                       position: 'relative',
                     }}
                   >
+                    {/* TODAY label */}
+                    {isToday && (
+                      <div style={{
+                        position: 'absolute', top: -8, left: '50%', transform: 'translateX(-50%)',
+                        fontSize: '0.42rem', fontWeight: 800, letterSpacing: '0.1em',
+                        padding: '1px 6px', borderRadius: 4,
+                        background: t.accent, color: '#fff',
+                        boxShadow: `0 0 8px ${t.accentGlow}`,
+                      }}>TODAY</div>
+                    )}
                     {/* Day number + indicators */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                       <span style={{
-                        fontSize: '0.72rem', fontWeight: isToday ? 800 : 600,
+                        fontSize: isToday ? '0.78rem' : '0.72rem', fontWeight: isToday ? 800 : 600,
                         color: isToday ? t.accent : hasGame ? t.textStrong : t.textMuted,
+                        ...(isToday ? {
+                          background: `${t.accent}22`, borderRadius: '50%',
+                          width: 24, height: 24, display: 'inline-flex',
+                          alignItems: 'center', justifyContent: 'center',
+                          border: `1.5px solid ${t.accent}66`,
+                        } : {}),
                       }}>{day}</span>
                       <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
                         {hasGame && (

@@ -1334,56 +1334,91 @@ function LiveGame() {
 
       {/* ACTIVE GAME */}
       {hasActiveGame && (<>
-      <Card style={{ padding: 32, borderColor: `${t.accent}22`, background: `linear-gradient(135deg, ${t.cardBg}, ${t.accent}08)` }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 48 }}>
-          <div style={{ textAlign: 'center' }}><TeamLogo abbr={g.away.abbr} /><div style={{ fontFamily: "'DM Sans'", fontSize: '0.75rem', fontWeight: 600, color: t.textMuted2, letterSpacing: '0.1em', marginTop: 8 }}>{g.away.abbr}</div></div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontFamily: "'Bebas Neue'", fontSize: '5rem', color: t.textWhite, lineHeight: 1, textShadow: t.scoreShadow }}>{g.away.runs} <span style={{ color: t.textMuted3, margin: '0 12px', fontSize: '3rem' }}>—</span> {g.home.runs}</div>
-            <div style={{ fontFamily: "'DM Sans'", fontSize: '0.8rem', fontWeight: 600, color: t.accent, letterSpacing: '0.08em', marginTop: 8 }}>{g.inning}</div>
-          </div>
-          <div style={{ textAlign: 'center' }}><TeamLogo abbr={g.home.abbr} highlight /><div style={{ fontFamily: "'DM Sans'", fontSize: '0.75rem', fontWeight: 600, color: t.textMuted2, letterSpacing: '0.1em', marginTop: 8 }}>{g.home.abbr}</div></div>
-        </div>
-      </Card>
-      <div className="grid-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
-        <Card>
-          <CardHeader>COUNT</CardHeader>
-          <div style={{ display: 'flex', gap: 32, alignItems: 'center', justifyContent: 'center', padding: '12px 0' }}>
-            <div>
-              <CountRow label="B" count={g.balls} total={4} color={t.green} />
-              <CountRow label="S" count={g.strikes} total={3} color={t.yellow} />
-              <CountRow label="O" count={g.outs} total={3} color={t.red} />
-            </div>
-            <Diamond runners={g.runners} />
-          </div>
-        </Card>
-        <Card>
-          <CardHeader>AT BAT</CardHeader>
-          <div style={{ display: 'flex', justifyContent: 'space-around', padding: '16px 0', alignItems: 'center' }}>
-            <PlayerLink playerId={g.pitcher?.id} playerName={g.pitcher?.name} playerType="pitcher">
+      {/* ── UNIFIED FIELD CARD: Score + Count + AT BAT + Field ── */}
+      {(() => {
+        const fieldingTeam = g.inningHalf === 'Top' ? lineups.home : lineups.away
+        const defenders = fieldingTeam.filter(p => p.pos && p.pos !== 'DH').map(p => ({ name: p.name, pos: p.pos, id: p.id }))
+        return (
+          <Card style={{ padding: 24, borderColor: `${t.accent}22`, background: `linear-gradient(135deg, ${t.cardBg}, ${t.accent}06)` }}>
+            {/* ── SCOREBOARD ── */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 36, marginBottom: 16 }}>
+              <div style={{ textAlign: 'center' }}><TeamLogo abbr={g.away.abbr} size={48} /><div style={{ fontFamily: "'DM Sans'", fontSize: '0.68rem', fontWeight: 600, color: t.textMuted2, letterSpacing: '0.08em', marginTop: 4 }}>{g.away.abbr}</div></div>
               <div style={{ textAlign: 'center' }}>
-                <PlayerHeadshot playerId={g.pitcher?.id} name={g.pitcher?.name || ''} size={72} />
-                <div style={{ fontSize: '0.65rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', marginTop: 10 }}>PITCHER</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: t.textStrong, margin: '4px 0' }}>{g.pitcher?.name}</div>
-                <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.75rem', color: t.accent }}>ERA {g.pitcher?.era} · {g.pitcher?.pitches}P</div>
+                <div style={{ fontFamily: "'Bebas Neue'", fontSize: '3.8rem', color: t.textWhite, lineHeight: 1, textShadow: t.scoreShadow }}>{g.away.runs} <span style={{ color: t.textMuted3, margin: '0 8px', fontSize: '2.2rem' }}>—</span> {g.home.runs}</div>
+                <div style={{ fontFamily: "'DM Sans'", fontSize: '0.72rem', fontWeight: 600, color: t.accent, letterSpacing: '0.08em', marginTop: 4 }}>{g.inning}</div>
               </div>
-            </PlayerLink>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-              <div style={{ fontFamily: "'Bebas Neue'", fontSize: '1.8rem', color: t.textMuted3 }}>VS</div>
-              <div style={{ width: 40, height: 2, background: `linear-gradient(90deg, transparent, ${t.accent}44, transparent)`, borderRadius: 1 }} />
+              <div style={{ textAlign: 'center' }}><TeamLogo abbr={g.home.abbr} size={48} highlight /><div style={{ fontFamily: "'DM Sans'", fontSize: '0.68rem', fontWeight: 600, color: t.textMuted2, letterSpacing: '0.08em', marginTop: 4 }}>{g.home.abbr}</div></div>
             </div>
-            <PlayerLink playerId={g.batter?.id} playerName={g.batter?.name} playerType="batter">
-              <div style={{ textAlign: 'center' }}>
-                <PlayerHeadshot playerId={g.batter?.id} name={g.batter?.name || ''} size={72} />
-                <div style={{ fontSize: '0.65rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.1em', marginTop: 10 }}>BATTER</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: t.textStrong, margin: '4px 0' }}>{g.batter?.name}</div>
-                <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.75rem', color: t.accent }}>AVG {g.batter?.avg}</div>
-              </div>
-            </PlayerLink>
-          </div>
-        </Card>
-      </div>
 
-      {/* PITCH ANALYSIS + FIELD */}
+            <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${t.accent}33, transparent)`, marginBottom: 16 }} />
+
+            {/* ── FIELD + SIDEBAR ── */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: 20, alignItems: 'start' }}>
+              {/* Left: Field SVG */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <BaseballFieldSVG defenders={defenders} runners={g.runners} hitData={g.hitData} batter={g.batter} />
+                </div>
+                {g.hitData && (
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 6 }}>
+                    {g.hitData.launchSpeed && <StatMini label="EXIT VELO" value={`${Math.round(g.hitData.launchSpeed)} mph`} />}
+                    {g.hitData.launchAngle != null && <StatMini label="LAUNCH ∠" value={`${g.hitData.launchAngle}°`} />}
+                    {g.hitData.totalDistance && <StatMini label="DISTANCE" value={`${Math.round(g.hitData.totalDistance)} ft`} />}
+                  </div>
+                )}
+              </div>
+
+              {/* Right: Count + AT BAT */}
+              <div>
+                {/* Count */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: '0.6rem', fontWeight: 700, color: t.textMuted, letterSpacing: '0.1em', marginBottom: 8 }}>COUNT</div>
+                  <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+                    <div>
+                      <CountRow label="B" count={g.balls} total={4} color={t.green} />
+                      <CountRow label="S" count={g.strikes} total={3} color={t.yellow} />
+                      <CountRow label="O" count={g.outs} total={3} color={t.red} />
+                    </div>
+                    <Diamond runners={g.runners} />
+                  </div>
+                </div>
+
+                <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${t.divider}, transparent)`, marginBottom: 14 }} />
+
+                {/* AT BAT matchup */}
+                <div style={{ fontSize: '0.6rem', fontWeight: 700, color: t.textMuted, letterSpacing: '0.1em', marginBottom: 10 }}>AT BAT</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <PlayerLink playerId={g.pitcher?.id} playerName={g.pitcher?.name} playerType="pitcher">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 10, background: `${t.accent}08` }}>
+                      <PlayerHeadshot playerId={g.pitcher?.id} name={g.pitcher?.name || ''} size={40} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.08em' }}>PITCHER</div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: t.textStrong }}>{g.pitcher?.name}</div>
+                        <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.65rem', color: t.accent }}>{g.pitcher?.era ? `ERA ${g.pitcher.era}` : ''} · {g.pitcher?.pitches}P</div>
+                      </div>
+                    </div>
+                  </PlayerLink>
+                  <div style={{ textAlign: 'center' }}>
+                    <span style={{ fontFamily: "'Bebas Neue'", fontSize: '1rem', color: t.textMuted3, letterSpacing: '0.1em' }}>VS</span>
+                  </div>
+                  <PlayerLink playerId={g.batter?.id} playerName={g.batter?.name} playerType="batter">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 10, background: `${t.accent}08` }}>
+                      <PlayerHeadshot playerId={g.batter?.id} name={g.batter?.name || ''} size={40} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.6rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.08em' }}>BATTER</div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: t.textStrong }}>{g.batter?.name}</div>
+                        <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.65rem', color: t.accent }}>{g.batter?.avg ? `AVG ${g.batter.avg}` : ''}</div>
+                      </div>
+                    </div>
+                  </PlayerLink>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )
+      })()}
+
+      {/* PITCH ANALYSIS */}
       {g.isLive && (
         <div className="grid-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
           <StrikeZone pitches={g.currentAtBatPitches || []} lastPitch={g.lastPitch} />
@@ -1393,29 +1428,6 @@ function LiveGame() {
           </div>
         </div>
       )}
-      {g.isLive && (() => {
-        // Compute defensive positions from lineups
-        const fieldingTeam = g.inningHalf === 'Top' ? lineups.home : lineups.away
-        const defenders = fieldingTeam.filter(p => p.pos && p.pos !== 'DH').map(p => ({
-          name: p.name, pos: p.pos, id: p.id,
-        }))
-        return (
-          <Card style={{ marginTop: 16 }}>
-            <CardHeader>FIELD</CardHeader>
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <BaseballFieldSVG defenders={defenders} runners={g.runners} hitData={g.hitData} batter={g.batter} />
-            </div>
-            {g.hitData && (
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t.divider}` }}>
-                {g.hitData.launchSpeed && <StatMini label="EXIT VELO" value={`${Math.round(g.hitData.launchSpeed)} mph`} />}
-                {g.hitData.launchAngle != null && <StatMini label="LAUNCH ∠" value={`${g.hitData.launchAngle}°`} />}
-                {g.hitData.totalDistance && <StatMini label="DISTANCE" value={`${Math.round(g.hitData.totalDistance)} ft`} />}
-                {g.hitData.trajectory && <StatMini label="TYPE" value={g.hitData.trajectory.replace('_', ' ')} />}
-              </div>
-            )}
-          </Card>
-        )
-      })()}
 
       <Card style={{ marginTop: 16 }}>
         <CardHeader>LINESCORE</CardHeader>

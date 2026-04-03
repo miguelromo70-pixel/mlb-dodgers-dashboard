@@ -92,6 +92,56 @@ function parseLiveGame(data) {
     rbi: play.result?.rbi || 0,
   }))
 
+  // ── Current play pitch-by-pitch data ──
+  const currentPlay = ld.plays?.currentPlay || {}
+  const playEvents = currentPlay.playEvents || []
+  const pitchEvents = playEvents.filter(e => e.isPitch)
+  const lastPitchEvent = pitchEvents[pitchEvents.length - 1] || null
+
+  const lastPitch = lastPitchEvent ? {
+    speed: lastPitchEvent.pitchData?.startSpeed || null,
+    endSpeed: lastPitchEvent.pitchData?.endSpeed || null,
+    type: lastPitchEvent.details?.type?.description || '',
+    typeCode: lastPitchEvent.details?.type?.code || '',
+    call: lastPitchEvent.details?.call?.description || '',
+    callCode: lastPitchEvent.details?.call?.code || '',
+    isStrike: lastPitchEvent.details?.isStrike || false,
+    isBall: lastPitchEvent.details?.isBall || false,
+    isInPlay: lastPitchEvent.details?.isInPlay || false,
+    pX: lastPitchEvent.pitchData?.coordinates?.pX ?? null,
+    pZ: lastPitchEvent.pitchData?.coordinates?.pZ ?? null,
+    zone: lastPitchEvent.pitchData?.zone ?? null,
+    spinRate: lastPitchEvent.pitchData?.breaks?.spinRate || null,
+    breakVertical: lastPitchEvent.pitchData?.breaks?.breakVerticalInduced || null,
+    breakHorizontal: lastPitchEvent.pitchData?.breaks?.breakHorizontal || null,
+  } : null
+
+  const currentAtBatPitches = pitchEvents.map(e => ({
+    speed: e.pitchData?.startSpeed || null,
+    type: e.details?.type?.description || '',
+    typeCode: e.details?.type?.code || '',
+    call: e.details?.call?.description || '',
+    callCode: e.details?.call?.code || '',
+    isStrike: e.details?.isStrike || false,
+    isBall: e.details?.isBall || false,
+    isInPlay: e.details?.isInPlay || false,
+    pX: e.pitchData?.coordinates?.pX ?? null,
+    pZ: e.pitchData?.coordinates?.pZ ?? null,
+    zone: e.pitchData?.zone ?? null,
+  }))
+
+  // ── Hit data (ball in play) ──
+  const lastHitEvent = [...playEvents].reverse().find(e => e.hitData?.coordinates?.coordX)
+  const hitData = lastHitEvent ? {
+    launchSpeed: lastHitEvent.hitData.launchSpeed || null,
+    launchAngle: lastHitEvent.hitData.launchAngle || null,
+    totalDistance: lastHitEvent.hitData.totalDistance || null,
+    trajectory: lastHitEvent.hitData.trajectory || '',
+    hardness: lastHitEvent.hitData.hardness || '',
+    coordX: lastHitEvent.hitData.coordinates?.coordX ?? null,
+    coordY: lastHitEvent.hitData.coordinates?.coordY ?? null,
+  } : null
+
   return {
     isLive: status === 'In Progress' || status === 'Live',
     isFinal: status === 'Final' || status.includes('Final'),
@@ -144,6 +194,9 @@ function parseLiveGame(data) {
       id: offense.inHole?.id,
     },
     inningHalf: ls.inningHalf || '',
+    lastPitch,
+    currentAtBatPitches,
+    hitData,
     innings,
     plays: recentPlays,
   }
@@ -192,7 +245,7 @@ export async function getGameLineups(gamePk) {
 export async function getBoxscoreStats(gamePk, pitcherId, batterId) {
   try {
     const data = await fetchJSON(`${BASE}/game/${gamePk}/boxscore`)
-    const result = { pitcherEra: '', pitcherPitches: 0, batterAvg: '' }
+    const result = { pitcherEra: '', pitcherPitches: 0, batterAvg: '', pitcherGameStats: null }
     const findInTeam = (team) => {
       const players = team?.players || {}
       for (const key of Object.keys(players)) {
@@ -201,9 +254,19 @@ export async function getBoxscoreStats(gamePk, pitcherId, batterId) {
           const ps = p.stats?.pitching || {}
           result.pitcherEra = ps.era || ''
           result.pitcherPitches = ps.numberOfPitches || 0
+          result.pitcherGameStats = {
+            ip: ps.inningsPitched || '0',
+            h: ps.hits ?? 0,
+            r: ps.runs ?? 0,
+            er: ps.earnedRuns ?? 0,
+            bb: ps.baseOnBalls ?? 0,
+            so: ps.strikeOuts ?? 0,
+            hr: ps.homeRuns ?? 0,
+            pitches: ps.numberOfPitches ?? 0,
+            strikes: ps.strikes ?? 0,
+          }
         }
         if (p.person?.id === batterId) {
-          const bs = p.stats?.batting || {}
           result.batterAvg = p.seasonStats?.batting?.avg || ''
         }
       }

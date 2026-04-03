@@ -267,6 +267,7 @@ export default function App() {
         if (box.pitcherEra) data.pitcher.era = box.pitcherEra
         if (box.pitcherPitches) data.pitcher.pitches = box.pitcherPitches
         if (box.batterAvg) data.batter.avg = box.batterAvg
+        if (box.pitcherGameStats) data.pitcherGameStats = box.pitcherGameStats
       }
       setLiveGame(data)
       setLineups(lineupsData)
@@ -1381,6 +1382,41 @@ function LiveGame() {
           </div>
         </Card>
       </div>
+
+      {/* PITCH ANALYSIS + FIELD */}
+      {g.isLive && (
+        <div className="grid-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+          <StrikeZone pitches={g.currentAtBatPitches || []} lastPitch={g.lastPitch} />
+          <div>
+            <LastPitchCard lastPitch={g.lastPitch} />
+            <PitcherStatsCard pitcher={g.pitcher} pitcherGameStats={g.pitcherGameStats} />
+          </div>
+        </div>
+      )}
+      {g.isLive && (() => {
+        // Compute defensive positions from lineups
+        const fieldingTeam = g.inningHalf === 'Top' ? lineups.home : lineups.away
+        const defenders = fieldingTeam.filter(p => p.pos && p.pos !== 'DH').map(p => ({
+          name: p.name, pos: p.pos, id: p.id,
+        }))
+        return (
+          <Card style={{ marginTop: 16 }}>
+            <CardHeader>FIELD</CardHeader>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <BaseballFieldSVG defenders={defenders} runners={g.runners} hitData={g.hitData} />
+            </div>
+            {g.hitData && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${t.divider}` }}>
+                {g.hitData.launchSpeed && <StatMini label="EXIT VELO" value={`${Math.round(g.hitData.launchSpeed)} mph`} />}
+                {g.hitData.launchAngle != null && <StatMini label="LAUNCH ∠" value={`${g.hitData.launchAngle}°`} />}
+                {g.hitData.totalDistance && <StatMini label="DISTANCE" value={`${Math.round(g.hitData.totalDistance)} ft`} />}
+                {g.hitData.trajectory && <StatMini label="TYPE" value={g.hitData.trajectory.replace('_', ' ')} />}
+              </div>
+            )}
+          </Card>
+        )
+      })()}
+
       <Card style={{ marginTop: 16 }}>
         <CardHeader>LINESCORE</CardHeader>
         <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '4px', fontFamily: "'JetBrains Mono'", fontSize: '0.8rem' }}>
@@ -3565,6 +3601,263 @@ function Diamond({ runners }) {
   )
 }
 
+/* ═══════════════════════════════════════════
+   STRIKE ZONE VISUALIZATION
+   ═══════════════════════════════════════════ */
+function StrikeZone({ pitches, lastPitch }) {
+  const t = useTheme()
+  // Map plate coordinates (feet) to SVG coordinates
+  // pX: -2 to 2 feet, pZ: 1.0 to 4.0 feet
+  const mapX = (pX) => 100 + (pX * 55)
+  const mapY = (pZ) => 190 - ((pZ - 1.0) * 55)
+  // Zone box: -0.83 to 0.83 feet wide, ~1.5 to 3.5 feet high
+  const zoneLeft = mapX(-0.83), zoneRight = mapX(0.83)
+  const zoneTop = mapY(3.5), zoneBot = mapY(1.5)
+  const zoneW = zoneRight - zoneLeft, zoneH = zoneBot - zoneTop
+
+  const pitchColor = (p) => {
+    if (p.isInPlay) return t.cyan
+    if (p.callCode === 'F') return t.yellow
+    if (p.isStrike) return t.red
+    if (p.isBall) return t.green
+    return t.textMuted
+  }
+
+  return (
+    <Card>
+      <CardHeader>STRIKE ZONE</CardHeader>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0' }}>
+        <svg viewBox="0 0 200 220" style={{ width: '100%', maxWidth: 260, height: 'auto' }}>
+          {/* Zone background */}
+          <rect x={zoneLeft} y={zoneTop} width={zoneW} height={zoneH} fill={`${t.accent}08`} stroke={`${t.accent}44`} strokeWidth="1.5" rx="2" />
+          {/* Grid lines 3x3 */}
+          {[1, 2].map(i => (
+            <g key={i}>
+              <line x1={zoneLeft + (zoneW / 3) * i} y1={zoneTop} x2={zoneLeft + (zoneW / 3) * i} y2={zoneBot} stroke={`${t.accent}22`} strokeWidth="0.5" />
+              <line x1={zoneLeft} y1={zoneTop + (zoneH / 3) * i} x2={zoneRight} y2={zoneTop + (zoneH / 3) * i} stroke={`${t.accent}22`} strokeWidth="0.5" />
+            </g>
+          ))}
+          {/* Home plate */}
+          <polygon points="88,205 100,212 112,205 112,200 88,200" fill="none" stroke={`${t.textMuted}44`} strokeWidth="1" />
+          {/* Pitch dots */}
+          {pitches.map((p, i) => {
+            if (p.pX == null || p.pZ == null) return null
+            const isLast = i === pitches.length - 1
+            const cx = mapX(p.pX), cy = mapY(p.pZ)
+            const color = pitchColor(p)
+            return (
+              <g key={i}>
+                <circle cx={cx} cy={cy} r={isLast ? 8 : 5} fill={color + (isLast ? '99' : '55')} stroke={color} strokeWidth={isLast ? 2 : 1} />
+                {isLast && <circle cx={cx} cy={cy} r={12} fill="none" stroke={color} strokeWidth="1" opacity="0.4" className="at-bat-ring" />}
+                <text x={cx} y={cy + 3} textAnchor="middle" fill="#fff" fontSize="7" fontWeight="700" fontFamily="JetBrains Mono">{i + 1}</text>
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+      {/* Legend */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 14, paddingTop: 6 }}>
+        {[['Strike', t.red], ['Ball', t.green], ['Foul', t.yellow], ['In Play', t.cyan]].map(([label, color]) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: color + '88', border: `1px solid ${color}` }} />
+            <span style={{ fontSize: '0.55rem', color: t.textMuted, fontWeight: 600 }}>{label}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+/* ═══════════════════════════════════════════
+   LAST PITCH INFO CARD
+   ═══════════════════════════════════════════ */
+function LastPitchCard({ lastPitch }) {
+  const t = useTheme()
+  if (!lastPitch) return null
+  const callColor = lastPitch.isInPlay ? t.cyan : lastPitch.isStrike ? t.red : lastPitch.isBall ? t.green : t.textMuted
+  return (
+    <Card>
+      <CardHeader>LAST PITCH</CardHeader>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '8px 0' }}>
+        {/* Speed */}
+        <div style={{ textAlign: 'center', minWidth: 70 }}>
+          <div style={{ fontFamily: "'Bebas Neue'", fontSize: '2.8rem', color: t.textWhite, lineHeight: 1, textShadow: `0 0 20px ${t.accentGlow}` }}>{lastPitch.speed ? Math.round(lastPitch.speed) : '—'}</div>
+          <div style={{ fontSize: '0.6rem', fontWeight: 700, color: t.textMuted, letterSpacing: '0.1em' }}>MPH</div>
+        </div>
+        {/* Type + Result */}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: "'DM Sans'", fontSize: '0.9rem', fontWeight: 700, color: t.textStrong, marginBottom: 4 }}>{lastPitch.type || 'Unknown'}</div>
+          <span style={{
+            display: 'inline-block', padding: '3px 10px', borderRadius: 6,
+            fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em',
+            background: callColor + '22', color: callColor, border: `1px solid ${callColor}44`,
+          }}>{lastPitch.call || '—'}</span>
+          {lastPitch.spinRate && (
+            <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.62rem', color: t.textMuted2, marginTop: 6 }}>
+              {lastPitch.spinRate} RPM
+              {lastPitch.breakVertical ? ` · ${lastPitch.breakVertical.toFixed(1)}" drop` : ''}
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+/* ═══════════════════════════════════════════
+   PITCHER GAME STATS CARD
+   ═══════════════════════════════════════════ */
+function PitcherStatsCard({ pitcher, pitcherGameStats }) {
+  const t = useTheme()
+  if (!pitcherGameStats) return null
+  const ps = pitcherGameStats
+  const strikePct = ps.pitches > 0 ? Math.round((ps.strikes / ps.pitches) * 100) : 0
+  const pitchLoad = Math.min(ps.pitches / 110, 1)
+  const pitchColor = pitchLoad < 0.6 ? t.green : pitchLoad < 0.8 ? t.yellow : t.red
+
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <PlayerLink playerId={pitcher?.id} playerName={pitcher?.name} playerType="pitcher">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <PlayerHeadshot playerId={pitcher?.id} name={pitcher?.name || ''} size={36} />
+            <div>
+              <div style={{ fontWeight: 700, color: t.textStrong, fontSize: '0.85rem' }}>{pitcher?.name}</div>
+              <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.65rem', color: t.accent }}>ERA {pitcher?.era || '—'}</div>
+            </div>
+          </div>
+        </PlayerLink>
+      </div>
+      {/* Pitch count bar */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+          <span style={{ fontSize: '0.58rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.08em' }}>PITCH COUNT</span>
+          <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.72rem', fontWeight: 700, color: pitchColor }}>{ps.pitches}<span style={{ color: t.textMuted, fontWeight: 400 }}> / {ps.strikes}K</span></span>
+        </div>
+        <div style={{ height: 6, borderRadius: 3, background: t.inputBg, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pitchLoad * 100}%`, borderRadius: 3, background: `linear-gradient(90deg, ${t.green}, ${pitchColor})`, transition: 'width 0.5s ease', boxShadow: `0 0 8px ${pitchColor}66` }} />
+        </div>
+        <div style={{ textAlign: 'right', marginTop: 2 }}>
+          <span style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.58rem', color: t.textMuted2 }}>{strikePct}% strikes</span>
+        </div>
+      </div>
+      {/* Stats grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+        {[['IP', ps.ip], ['H', ps.h], ['R', ps.r], ['ER', ps.er], ['BB', ps.bb], ['SO', ps.so], ['HR', ps.hr]].map(([label, val]) => (
+          <div key={label} style={{ textAlign: 'center', padding: '6px 2px', background: t.inputBg, borderRadius: 6 }}>
+            <div style={{ fontFamily: "'JetBrains Mono'", fontSize: '0.85rem', fontWeight: 700, color: t.textWhite }}>{val}</div>
+            <div style={{ fontSize: '0.5rem', fontWeight: 600, color: t.textMuted, letterSpacing: '0.08em' }}>{label}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+/* ═══════════════════════════════════════════
+   BASEBALL FIELD SVG — DEFENSIVE POSITIONS + HIT TRAJECTORY
+   ═══════════════════════════════════════════ */
+const FIELD_POSITIONS = {
+  P: { x: 150, y: 182 }, C: { x: 150, y: 268 }, '1B': { x: 215, y: 178 },
+  '2B': { x: 182, y: 138 }, SS: { x: 118, y: 138 }, '3B': { x: 85, y: 178 },
+  LF: { x: 55, y: 80 }, CF: { x: 150, y: 42 }, RF: { x: 245, y: 80 },
+}
+
+function BaseballFieldSVG({ defenders, runners, hitData }) {
+  const t = useTheme()
+  // Map hit coordinates to SVG (API: ~250x250 space, home plate ~125,199)
+  const mapHitX = (cx) => (cx / 250) * 300
+  const mapHitY = (cy) => (cy / 250) * 300
+
+  return (
+    <svg viewBox="0 0 300 290" style={{ width: '100%', maxWidth: 500, height: 'auto' }}>
+      <defs>
+        <radialGradient id="fieldGrad" cx="50%" cy="85%" r="85%">
+          <stop offset="0%" stopColor={`${t.green}15`} />
+          <stop offset="100%" stopColor="transparent" />
+        </radialGradient>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+
+      {/* Outfield grass */}
+      <path d={`M 10,250 Q 10,10 150,10 Q 290,10 290,250 Z`} fill="url(#fieldGrad)" />
+
+      {/* Foul lines */}
+      <line x1="150" y1="250" x2="10" y2="30" stroke={`${t.textMuted}22`} strokeWidth="1" />
+      <line x1="150" y1="250" x2="290" y2="30" stroke={`${t.textMuted}22`} strokeWidth="1" />
+
+      {/* Outfield arc */}
+      <path d={`M 30,100 Q 150,0 270,100`} fill="none" stroke={`${t.accent}22`} strokeWidth="1" strokeDasharray="4 4" />
+
+      {/* Infield dirt */}
+      <polygon points="150,140 200,185 150,230 100,185" fill={`${t.yellow}06`} stroke={`${t.accent}18`} strokeWidth="1" />
+
+      {/* Base paths */}
+      <line x1="150" y1="250" x2="200" y2="185" stroke={`${t.accent}33`} strokeWidth="1" />
+      <line x1="200" y1="185" x2="150" y2="140" stroke={`${t.accent}33`} strokeWidth="1" />
+      <line x1="150" y1="140" x2="100" y2="185" stroke={`${t.accent}33`} strokeWidth="1" />
+      <line x1="100" y1="185" x2="150" y2="250" stroke={`${t.accent}33`} strokeWidth="1" />
+
+      {/* Pitcher's mound */}
+      <circle cx="150" cy="195" r="6" fill={`${t.accent}15`} stroke={`${t.accent}44`} strokeWidth="1" />
+
+      {/* Bases */}
+      {[
+        { x: 200, y: 185, on: runners?.first, label: '1B' },
+        { x: 150, y: 140, on: runners?.second, label: '2B' },
+        { x: 100, y: 185, on: runners?.third, label: '3B' },
+      ].map(base => (
+        <rect key={base.label} x={base.x - 7} y={base.y - 7} width={14} height={14}
+          transform={`rotate(45 ${base.x} ${base.y})`}
+          fill={base.on ? t.accent : 'transparent'} stroke={base.on ? t.accent : `${t.accent}44`}
+          strokeWidth={base.on ? 2 : 1}
+          filter={base.on ? 'url(#glow)' : undefined}
+        />
+      ))}
+      {/* Home plate */}
+      <polygon points="143,248 150,255 157,248 157,244 143,244" fill={`${t.textMuted}33`} stroke={`${t.textMuted}55`} strokeWidth="1" />
+
+      {/* Defensive players */}
+      {defenders.map((d, i) => {
+        const pos = FIELD_POSITIONS[d.pos]
+        if (!pos) return null
+        return (
+          <g key={i}>
+            <circle cx={pos.x} cy={pos.y} r={10} fill={`${t.accent}22`} stroke={`${t.accent}88`} strokeWidth="1.5" />
+            <text x={pos.x} y={pos.y + 3} textAnchor="middle" fill={t.accent} fontSize="8" fontWeight="700" fontFamily="DM Sans">{d.pos}</text>
+            <text x={pos.x} y={pos.y + 18} textAnchor="middle" fill={`${t.textMuted}cc`} fontSize="6" fontFamily="DM Sans">{d.name.split(' ').pop()}</text>
+          </g>
+        )
+      })}
+
+      {/* Hit trajectory */}
+      {hitData?.coordX != null && hitData?.coordY != null && (
+        <g>
+          <line x1="150" y1="250" x2={mapHitX(hitData.coordX)} y2={mapHitY(hitData.coordY)}
+            stroke={t.cyan} strokeWidth="2" strokeDasharray="6 3" opacity="0.7" className="ball-trajectory" />
+          <circle cx={mapHitX(hitData.coordX)} cy={mapHitY(hitData.coordY)} r={8}
+            fill={`${t.cyan}44`} stroke={t.cyan} strokeWidth="2" filter="url(#glow)" />
+          {hitData.totalDistance && (
+            <text x={mapHitX(hitData.coordX)} y={mapHitY(hitData.coordY) - 14}
+              textAnchor="middle" fill={t.cyan} fontSize="9" fontWeight="700" fontFamily="JetBrains Mono">
+              {Math.round(hitData.totalDistance)} ft
+            </text>
+          )}
+          {hitData.trajectory && (
+            <text x={mapHitX(hitData.coordX)} y={mapHitY(hitData.coordY) + 22}
+              textAnchor="middle" fill={`${t.textMuted}cc`} fontSize="7" fontFamily="DM Sans">
+              {hitData.trajectory.replace('_', ' ')}
+            </text>
+          )}
+        </g>
+      )}
+    </svg>
+  )
+}
+
 function StatMini({ label, value }) {
   const t = useTheme()
   return (
@@ -3644,7 +3937,11 @@ body { font-family: 'DM Sans', sans-serif; background: ${t.bg}; color: ${t.text}
 }
 .live-dot { animation: pulse 1.5s ease-in-out infinite; }
 .live-badge { animation: pulse 2s ease-in-out infinite alternate; }
+@keyframes dashTravel {
+  to { stroke-dashoffset: -18; }
+}
 .lineup-at-bat { animation: atBatGlow 2s ease-in-out infinite; }
+.ball-trajectory { animation: dashTravel 0.8s linear infinite; }
 .at-bat-ring { animation: atBatRing 1.8s ease-in-out infinite; }
 .at-bat-badge { animation: pulse 2s ease-in-out infinite; }
 .player-card { cursor: pointer; transition: all 0.3s ease !important; }

@@ -2,6 +2,13 @@ import { useState, useEffect, useRef, createContext, useContext, useCallback } f
 import * as api from './api.js'
 
 /* ═══════════════════════════════════════════
+   TIME ZONE — All times in CDMX (America/Mexico_City)
+   ═══════════════════════════════════════════ */
+const TZ = 'America/Mexico_City'
+const fmtTime = (date, opts = {}) => new Date(date).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit', ...opts })
+const fmtDate = (date, opts = {}) => new Date(date).toLocaleDateString('en-US', { timeZone: TZ, ...opts })
+
+/* ═══════════════════════════════════════════
    THEME SYSTEM
    ═══════════════════════════════════════════ */
 const ThemeCtx = createContext()
@@ -116,13 +123,6 @@ const PLAYERS = [
   { name: 'Evan Phillips', pos: 'RP', num: 59, id: 623465, type: 'pitcher', stats: { era: '2.10', whip: '0.92', so: 42, w: 3 }, rating: 85 },
 ]
 
-const CHAT_MESSAGES = [
-  { role: 'user', text: 'How is Ohtani doing this season?' },
-  { role: 'ai', text: "Shohei Ohtani is having an incredible 2026 season! He's batting .312 with 28 home runs and 64 RBIs. His OPS of 1.052 leads the NL." },
-  { role: 'user', text: "What about Yamamoto's pitching stats?" },
-  { role: 'ai', text: "Yoshinobu Yamamoto has been dominant. His 2.85 ERA ranks among the best in the NL, with 112 strikeouts in 98 innings. WHIP of 1.05 shows excellent control." },
-]
-
 const NEWS = [
   { title: "Ohtani Hits 28th Homer in Dominant Win Over Padres", source: "MLB.com", time: "2h ago", summary: "Shohei Ohtani launched a towering 2-run blast to right field as the Dodgers cruised to a 5-2 victory at Dodger Stadium." },
   { title: "Dodgers Extend NL West Lead to 7 Games", source: "ESPN", time: "4h ago", summary: "With their third consecutive win, the Dodgers now hold a commanding 7-game lead in the NL West division race." },
@@ -156,12 +156,8 @@ export default function App() {
   const [playerFilter, setPlayerFilter] = useState('all')
   const [selectedPlayer, setSelectedPlayer] = useState(null)
   const [profilePlayer, setProfilePlayer] = useState(null)
-  const [chatMessages, setChatMessages] = useState(CHAT_MESSAGES)
-  const [chatInput, setChatInput] = useState('')
-  const [isTyping, setIsTyping] = useState(false)
   const [themeMode, setThemeMode] = useState('dark')
   const [showMoreNav, setShowMoreNav] = useState(false)
-  const chatEndRef = useRef(null)
   const t = THEMES[themeMode]
 
   // ── Live data state ──
@@ -207,7 +203,7 @@ export default function App() {
               const dodScore = isDodHome ? g.home.score : g.away.score
               const oppScore = isDodHome ? g.away.score : g.home.score
               const dt = g.date ? new Date(g.date) : null
-              const dateStr = dt ? `${dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''
+              const dateStr = dt ? `${dt.toLocaleDateString('en-US', { timeZone: TZ, month: 'short', day: 'numeric' })}` : ''
               return {
                 opp: isDodHome ? g.away.abbr : g.home.abbr,
                 oppId: isDodHome ? g.away.id : g.home.id,
@@ -282,24 +278,6 @@ export default function App() {
     return () => clearInterval(interval)
   }, [loadLiveGame])
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatMessages, isTyping])
-
-  const handleChat = () => {
-    if (!chatInput.trim()) return
-    setChatMessages(prev => [...prev, { role: 'user', text: chatInput }])
-    setChatInput('')
-    setIsTyping(true)
-    setTimeout(() => {
-      setIsTyping(false)
-      setChatMessages(prev => [...prev, {
-        role: 'ai',
-        text: 'Great question! Based on the latest stats, the Dodgers are performing at an elite level this season. Their pitching staff has been particularly impressive with a combined ERA under 3.00 in the last 30 days.'
-      }])
-    }, 2000)
-  }
-
   const dataValue = {
     standings, liveGame, lineups, todaysGames, roster, schedule, socialFeed, news,
     recentGames, dodgersRecord, loading, selectedGamePk, setSelectedGamePk,
@@ -314,7 +292,6 @@ export default function App() {
     { id: 'players', icon: '🃏', label: 'PLAYER CARDS' },
     { id: 'social', icon: '📱', label: 'SOCIAL MEDIA' },
     { id: 'bets', icon: '🎰', label: 'BETS' },
-    { id: 'chat', icon: '💬', label: 'AI CHAT' },
   ]
 
   const s = mkStyles(t)
@@ -368,7 +345,6 @@ export default function App() {
           {activeSection === 'social' && <SocialMedia />}
           {activeSection === 'calendar' && <CalendarSection />}
           {activeSection === 'bets' && <BetsSection />}
-          {activeSection === 'chat' && <ChatSection messages={chatMessages} input={chatInput} setInput={setChatInput} onSend={handleChat} isTyping={isTyping} chatEndRef={chatEndRef} />}
         </main>
         </div>
 
@@ -712,8 +688,8 @@ function HomeNextGame({ onNav }) {
 
   const ng = nextGame
   const dt = new Date(ng.gameDate)
-  const dateStr = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-  const timeStr = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const dateStr = dt.toLocaleDateString('en-US', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric' })
+  const timeStr = dt.toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' })
 
   return (
     <div onClick={() => onNav('live')} style={{
@@ -826,7 +802,7 @@ function HomeBetsPreview({ onNav }) {
   const totBook = Object.keys(totals)[0]
   const totOuts = totals[totBook] || []
   const dt = new Date(dodgersGame.commence)
-  const timeStr = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const timeStr = dt.toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' })
 
   return (
     <Card style={{ cursor: 'pointer', borderColor: `${t.yellow}22` }} onClick={() => onNav('bets')}>
@@ -931,7 +907,7 @@ function HomeCalendarPreview({ onNav }) {
             const dt = g.date ? new Date(g.date) : null
             return (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-                <span style={{ fontSize: '0.6rem', color: t.textMuted, fontFamily: "'JetBrains Mono'", minWidth: 36 }}>{dt ? `${dt.getMonth()+1}/${dt.getDate()}` : ''}</span>
+                <span style={{ fontSize: '0.6rem', color: t.textMuted, fontFamily: "'JetBrains Mono'", minWidth: 36 }}>{dt ? fmtDate(dt, { month: 'numeric', day: 'numeric' }) : ''}</span>
                 <span style={{ width: 18, height: 18, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 800, background: won ? `${t.green}18` : `${t.red}18`, color: won ? t.green : t.red, border: `1px solid ${won ? t.green+'33' : t.red+'33'}` }}>{won ? 'W' : 'L'}</span>
                 <TeamLogo abbr={opp.abbr} teamId={opp.id} size={18} />
                 <span style={{ fontSize: '0.68rem', color: t.textStrong, flex: 1 }}>{isDodHome ? 'vs' : '@'} {opp.abbr}</span>
@@ -950,10 +926,10 @@ function HomeCalendarPreview({ onNav }) {
             const isDodHome = g.home.id === 119
             const opp = isDodHome ? g.away : g.home
             const dt = g.date ? new Date(g.date) : null
-            const timeStr = dt ? dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''
+            const timeStr = dt ? dt.toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }) : ''
             return (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-                <span style={{ fontSize: '0.6rem', color: t.textMuted, fontFamily: "'JetBrains Mono'", minWidth: 36 }}>{dt ? `${dt.getMonth()+1}/${dt.getDate()}` : ''}</span>
+                <span style={{ fontSize: '0.6rem', color: t.textMuted, fontFamily: "'JetBrains Mono'", minWidth: 36 }}>{dt ? fmtDate(dt, { month: 'numeric', day: 'numeric' }) : ''}</span>
                 <TeamLogo abbr={opp.abbr} teamId={opp.id} size={18} />
                 <span style={{ fontSize: '0.68rem', color: t.textStrong, flex: 1 }}>{isDodHome ? 'vs' : '@'} {opp.abbr}</span>
                 <span style={{ fontSize: '0.6rem', color: t.textMuted }}>{timeStr}</span>
@@ -1169,14 +1145,13 @@ function HomeSection({ onNav }) {
       </div>
 
       {/* Quick access */}
-      <div className="grid-6col" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginTop: 16 }}>
+      <div className="grid-6col" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginTop: 16 }}>
         {[
           { icon: '📺', label: 'Live Game', desc: 'Score & plays', id: 'live' },
           { icon: '📊', label: 'Stats', desc: 'Standings & leaders', id: 'stats' },
           { icon: '🃏', label: 'Players', desc: 'Trading cards', id: 'players' },
           { icon: '📅', label: 'Calendar', desc: 'Schedule', id: 'calendar' },
           { icon: '🎰', label: 'Bets', desc: 'Odds & lines', id: 'bets' },
-          { icon: '💬', label: 'AI Chat', desc: 'Ask anything', id: 'chat' },
         ].map((q, i) => (
           <Card key={i} style={{ cursor: 'pointer', textAlign: 'center' }} onClick={() => onNav(q.id)}>
             <div style={{ fontSize: '1.8rem', marginBottom: 6 }}>{q.icon}</div>
@@ -1651,8 +1626,8 @@ function NextGameScreen() {
 
   const ng = nextGame
   const gameDate = new Date(ng.gameDate)
-  const dateStr = gameDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-  const timeStr = gameDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const dateStr = gameDate.toLocaleDateString('en-US', { timeZone: TZ, weekday: 'long', month: 'long', day: 'numeric' })
+  const timeStr = `${gameDate.toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' })} CDMX`
 
   // Get top 3 stars per team
   const getStars = (players, type) => {
@@ -2626,12 +2601,14 @@ function PlayerProfile({ player, onClose }) {
         borderRadius: 20, backdropFilter: 'blur(20px)',
       }}>
         {/* Header */}
-        <div style={{
+        <div className="player-profile-header" style={{
           padding: '24px 28px', display: 'flex', gap: 20, alignItems: 'center',
           borderBottom: `1px solid ${t.divider}`,
           background: `linear-gradient(135deg, ${t.accent}12, transparent)`,
         }}>
-          <PlayerHeadshot playerId={player.id} name={player.name} size={90} />
+          <div className="player-profile-headshot">
+            <PlayerHeadshot playerId={player.id} name={player.name} size={90} />
+          </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: "'Oswald'", fontSize: '1.8rem', fontWeight: 700, color: t.textWhite, letterSpacing: '0.06em' }}>{info.fullName || player.name}</div>
             <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
@@ -2944,7 +2921,7 @@ function CalendarSection() {
                           <div style={{ fontSize: '0.55rem', fontWeight: 700, color: t.red, marginTop: 2 }}>LIVE</div>
                         ) : (
                           <div style={{ fontSize: '0.5rem', color: t.textMuted, marginTop: 2 }}>
-                            {new Date(dayGames[0].date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                            {new Date(dayGames[0].date).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' })}
                           </div>
                         )}
                       </div>
@@ -2991,7 +2968,7 @@ function CalendarSection() {
             const opp = game.isHome ? game.away : game.home
             const team = game.isHome ? game.home : game.away
             const dt = new Date(game.date)
-            const timeStr = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+            const timeStr = dt.toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' })
 
             return (
               <div key={gi} style={{
@@ -3218,8 +3195,8 @@ function BetsSection() {
             const spreadBook = Object.keys(spreads)[0]
             const totalBook = Object.keys(totals)[0]
             const dt = new Date(game.commence)
-            const timeStr = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-            const dateStr = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+            const timeStr = dt.toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' })
+            const dateStr = dt.toLocaleDateString('en-US', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric' })
 
             return (
               <div key={gi} style={{ marginBottom: gi < dodgersGames.length - 1 ? 20 : 0, paddingBottom: gi < dodgersGames.length - 1 ? 20 : 0, borderBottom: gi < dodgersGames.length - 1 ? `1px solid ${t.divider}` : 'none' }}>
@@ -3315,7 +3292,7 @@ function BetsSection() {
             const awayProb = h2hOutcomes[0] ? impliedProb(h2hOutcomes[0].price) : '50'
             const homeProb = h2hOutcomes[1] ? impliedProb(h2hOutcomes[1].price) : '50'
             const dt = new Date(game.commence)
-            const timeStr = dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+            const timeStr = dt.toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' })
             const isDod = isDodgersGame(game)
 
             return (
@@ -3434,61 +3411,6 @@ function BetsSection() {
 }
 
 /* ═══════════════════════════════════════════
-   CHAT
-   ═══════════════════════════════════════════ */
-function ChatSection({ messages, input, setInput, onSend, isTyping, chatEndRef }) {
-  const t = useTheme()
-  const suggestions = ['Dodgers record?', 'Who leads in HR?', 'Next game?', 'Ohtani stats?']
-  return (
-    <div style={{ maxWidth: 1200 }}>
-      <SectionHeader icon="💬" title="AI CHAT" />
-      <Card className="chat-container" style={{ padding: 0, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 140px)', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: `1px solid ${t.cardBorder}` }}>
-          <div style={{ width: 40, height: 40, borderRadius: '50%', background: `${t.accent}22`, border: `1px solid ${t.accent}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>⚾</div>
-          <div>
-            <div style={{ fontWeight: 700, color: t.textStrong, fontSize: '0.9rem' }}>MLB Assistant</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: t.green, boxShadow: `0 0 6px ${t.green}88` }} />
-              <span style={{ fontSize: '0.7rem', color: t.green }}>Online</span>
-            </div>
-          </div>
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
-          {messages.map((msg, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: 12 }}>
-              <div style={msg.role === 'user'
-                ? { maxWidth: '70%', padding: '12px 16px', background: `linear-gradient(135deg, ${t.accent}, #1A7AD9)`, borderRadius: '16px 16px 4px 16px', color: '#FFFFFF', fontSize: '0.85rem', lineHeight: 1.5 }
-                : { maxWidth: '70%', padding: '12px 16px', background: t.inputBg, border: `1px solid ${t.cardBorder}`, borderRadius: '16px 16px 16px 4px', color: t.text, fontSize: '0.85rem', lineHeight: 1.5 }
-              }>{msg.text}</div>
-            </div>
-          ))}
-          {isTyping && (
-            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 12 }}>
-              <div style={{ padding: '12px 16px', background: t.inputBg, border: `1px solid ${t.cardBorder}`, borderRadius: '16px 16px 16px 4px' }}>
-                <div className="typing-dots"><span /><span /><span /></div>
-              </div>
-            </div>
-          )}
-          <div ref={chatEndRef} />
-        </div>
-        <div style={{ display: 'flex', gap: 8, padding: '8px 20px', overflowX: 'auto', flexShrink: 0 }}>
-          {suggestions.map((s, i) => (
-            <button key={i} onClick={() => setInput(s)} style={{ padding: '6px 14px', background: `${t.accent}14`, border: `1px solid ${t.accent}33`, borderRadius: 20, color: t.accent, fontSize: '0.72rem', fontWeight: 600, fontFamily: "'DM Sans'", cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>{s}</button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 8, padding: '12px 20px 16px', borderTop: `1px solid ${t.cardBorder}`, flexShrink: 0 }}>
-          <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && onSend()} placeholder="Ask about MLB stats, history, rules..."
-            style={{ flex: 1, padding: '12px 16px', background: t.inputBg, border: `1px solid ${t.inputBorder}`, borderRadius: 12, color: t.textStrong, fontSize: '0.85rem', fontFamily: "'DM Sans'", outline: 'none' }} />
-          <button onClick={onSend} style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${t.accent}, #00B4FF)`, border: 'none', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 15px ${t.accentGlow}`, flexShrink: 0 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13" /><path d="M22 2L15 22L11 13L2 9L22 2Z" /></svg>
-          </button>
-        </div>
-      </Card>
-    </div>
-  )
-}
-
-/* ═══════════════════════════════════════════
    SHARED COMPONENTS
    ═══════════════════════════════════════════ */
 function Card({ children, style, className, onClick }) {
@@ -3549,7 +3471,8 @@ function PlayerHeadshot({ playerId, name, size = 80 }) {
   const url = `https://midfield.mlbstatic.com/v1/people/${playerId}/spots/120`
   return (
     <div style={{
-      width: size, height: size, borderRadius: '50%',
+      width: size, height: size, minWidth: size, minHeight: size,
+      flexShrink: 0, borderRadius: '50%',
       border: `2px solid ${t.accent}44`,
       overflow: 'hidden', background: t.inputBg,
       boxShadow: `0 0 20px ${t.accentGlow}, inset 0 0 20px ${t.accent}11`,
@@ -4343,6 +4266,8 @@ body { font-family: 'DM Sans', sans-serif; background: ${t.bg}; color: ${t.text}
   .field-score { gap: 20px !important; }
   .field-score-num { font-size: 2.8rem !important; }
   .field-score-num span { font-size: 1.6rem !important; }
+  .player-profile-header { padding: 16px !important; gap: 12px !important; }
+  .player-profile-headshot > div { width: 64px !important; height: 64px !important; min-width: 64px !important; min-height: 64px !important; }
   .lineup-horizontal { grid-template-columns: 1fr !important; }
   .lineup-horizontal > div:nth-child(2) { width: 100% !important; height: 1px !important; margin: 8px 0 !important; background: linear-gradient(90deg, transparent, ${t.accent}33, transparent) !important; }
   .score-big-resp { font-size: 3rem !important; }
